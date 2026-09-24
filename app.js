@@ -6,18 +6,20 @@
     'use strict';
 
     const CHALLENGES = [
-        { id: 1,  emoji: '💑', title: 'Foto con los novios',        description: 'Consigue una foto junto a la pareja.', tips: ['Pide a alguien que les haga la foto', 'Busca un buen fondo'], filename: 'Reto_01_Novios' },
-        { id: 2,  emoji: '🥂', title: 'Brindis con la novia',       description: 'Hazte una foto brindando con la novia.', tips: ['Espera al brindis oficial', 'Sonríe mucho'], filename: 'Reto_02_Brindis_Novia' },
-        { id: 3,  emoji: '💃', title: 'Bailando en la pista',       description: 'Captura el momento bailando con toda la energía.', tips: ['Pide a alguien que te grabe', 'Muévete mucho'], filename: 'Reto_03_Bailando' },
-        { id: 4,  emoji: '👔', title: 'Con alguien de traje',       description: 'Foto con la persona más elegante que encuentres.', tips: ['Busca a los padrinos', 'Los hombres suelen llevar traje'], filename: 'Reto_04_Traje' },
-        { id: 5,  emoji: '👰', title: 'Familia de la novia',        description: 'Hazte un selfie con algún miembro de la familia.', tips: ['Pide permiso con una sonrisa', 'Usa el espejo si es necesario'], filename: 'Reto_05_Familia_Novia' },
-        { id: 6,  emoji: '🤵', title: 'Familia del novio',          description: 'Busca a un familiar del novio para la foto.', tips: ['Los abuelos son perfectos', 'Pregunta quién es quién'], filename: 'Reto_06_Familia_Novio' },
-        { id: 7,  emoji: '🎂', title: 'Con el pastel',              description: 'Foto junto al pastel antes de que lo corten.', tips: ['Ve rápido antes del corte', 'Busca un buen ángulo'], filename: 'Reto_07_Pastel' },
-        { id: 8,  emoji: '🌹', title: 'La bouquet volando',         description: 'Captura el momento del lanzamiento del ramo.', tips: ['Aléjate un poco', 'Ten el dedo listo para disparar'], filename: 'Reto_08_Bouquet' },
-        { id: 9,  emoji: '😂', title: 'Riendo a carcajadas',        description: 'Una foto donde estés riendo con toda la boca.', tips: ['Alguien debe hacer reír', 'La más graciosa gana'], filename: 'Reto_09_Riendo' },
-        { id: 10, emoji: '💍', title: 'Foto de los anillos',        description: 'Foto de cerca de los anillos de la pareja.', tips: ['Pide a los novios', 'Busca buena luz'], filename: 'Reto_10_Anillos' },
-        { id: 11, emoji: '🎶', title: 'Con el DJ o la banda',      description: 'Foto con quien pone la música de la fiesta.', tips: ['Acércate al área de música', 'Espera entre canciones'], filename: 'Reto_11_DJ' },
-        { id: 12, emoji: '🌙', title: 'Foto nocturna',              description: 'Usa velas o luces para una foto artística.', tips: ['Busca velas o luces cálidas', 'Usa modo nocturno'], filename: 'Reto_12_Nocturna' }
+        { id: 1,  emoji: '👔', title: 'Con alguien de traje',       description: 'Foto con alguien que vaya de traje.', tips: ['Busca a los padrinos o al novio', 'Los hombres suelen ir de traje'], filename: 'Reto_01_Traje' },
+        { id: 2,  emoji: '💐', title: 'Flores y decoración',        description: 'Una foto de las flores o la decoración de la boda.', tips: ['El ramo o el arreglo floral estrella', 'Busca un buen fondo'], filename: 'Reto_02_Flores' },
+        { id: 3,  emoji: '🗺️', title: 'De fuera de Zaragoza',       description: 'Foto con alguien que no haya nacido en Zaragoza.', tips: ['Pregunta: ¿de dónde eres?', 'Los invitados de fuera siempre posan bien'], filename: 'Reto_03_Fuera_Zaragoza' },
+        { id: 4,  emoji: '🔵', title: 'Alguien de azul',            description: 'Foto con alguien que vaya de azul.', tips: ['Camisas, vestidos o corbatas azules', 'Pide permiso antes de la foto'], filename: 'Reto_04_Azul' },
+        { id: 5,  emoji: '📏', title: 'Más alto que tú',            description: 'Foto con alguien más alto que tú.', tips: ['Poneos de pie, espalda con espalda', 'Que se vea la diferencia'], filename: 'Reto_05_Mas_Alto' },
+        { id: 6,  emoji: '📐', title: 'Más bajo que tú',            description: 'Foto con alguien más bajo que tú.', tips: ['Aprovecha para hacer la foto graciosa', 'Pide la foto a un tercero'], filename: 'Reto_06_Mas_Bajo' },
+        { id: 7,  emoji: '🥂', title: 'Un brindis',                 description: 'Una foto de un brindis.', tips: ['Espera al brindis oficial', 'Brinda con las copas llenas'], filename: 'Reto_07_Brindis' },
+        { id: 8,  emoji: '🍽️', title: 'La comida',                  description: 'Una foto de la comida.', tips: ['Saca la foto antes de probar', 'El bufé siempre queda bien'], filename: 'Reto_08_Comida' },
+        { id: 9,  emoji: '🎂', title: 'La tarta',                   description: 'Una foto de la tarta.', tips: ['Ve antes de que la corten', 'El corte de la tarta es foto obligada'], filename: 'Reto_09_Tarta' },
+        { id: 10, emoji: '💑', title: 'Foto con los novios',        description: 'Consigue una foto junto a la pareja.', tips: ['Pide a alguien que os haga la foto', 'Busca un buen fondo'], filename: 'Reto_10_Novios' },
+        { id: 11, emoji: '💃', title: 'Bailando',                   description: 'Una foto bailando en la pista.', tips: ['Saca la foto en plena canción', 'Que se vea el movimiento'], filename: 'Reto_11_Bailando' },
+        { id: 12, emoji: '🎈', title: 'Mismo mes que tú',           description: 'Foto con alguien que haya nacido el mismo mes que tú.', tips: ['Pregunta por el cumpleaños', 'La peña del mes siempre sale bien'], filename: 'Reto_12_Mismo_Mes' },
+        { id: 13, emoji: '🎧', title: 'El momento del DJ',          description: 'Una foto del momento del DJ.', tips: ['Acércate al área de música', 'Espera entre canciones'], filename: 'Reto_13_DJ' },
+        { id: 14, emoji: '🌙', title: 'Foto por la noche',          description: 'Una foto por la noche.', tips: ['Usa el modo nocturno del móvil', 'Las luces de la fiesta ayudan'], filename: 'Reto_14_Noche' }
     ];
 
     const STORAGE_PREFIX = 'gymkana_boda_';
