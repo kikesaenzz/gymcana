@@ -1576,3 +1576,65 @@ body::before {
     min-width: 52px;
     text-align: center;
 }
+
+/* ============================================================
+   CONFIRMACIÓN DE NOMBRE — integrada en la app
+   (sustituye al diálogo del navegador)
+   ============================================================ */
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9995;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1.2rem;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+.confirm-overlay.active {
+    display: flex;
+}
+
+.confirm-card {
+    width: min(400px, 100%);
+    padding: 1.7rem 1.4rem 1.5rem;
+    text-align: center;
+    animation: fadeInUp 0.35s ease;
+}
+
+.confirm-icon {
+    font-size: 2.1rem;
+    margin-bottom: 0.5rem;
+}
+
+.confirm-title {
+    font-family: var(--font-display);
+    font-size: 1.2rem;
+    color: var(--white);
+    margin-bottom: 0.55rem;
+    line-height: 1.3;
+}
+
+.confirm-text {
+    font-size: 0.87rem;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.55;
+    margin-bottom: 1.3rem;
+}
+
+.confirm-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.confirm-actions .btn-primary,
+.confirm-actions .btn-secondary {
+    width: 100%;
+    max-width: none;
+    padding: 0.85rem 1.5rem;
+    margin: 0;
+}

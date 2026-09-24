@@ -184,12 +184,17 @@
         });
 
         btnStart.addEventListener('click', async () => {
+            // Evita dobles clics mientras se comprueba el nombre
+            if (btnStart.dataset.busy) return;
+            btnStart.dataset.busy = '1';
+
             const name = usernameInput.value.trim();
-            if (name.length < 2) return;
+            if (name.length < 2) { delete btnStart.dataset.busy; return; }
             const key = normalizeName(name);
 
             // ¿Ese nombre ya está en uso? Preguntamos si de verdad es
-            // la misma persona antes de continuar.
+            // la misma persona antes de continuar, con un mensaje
+            // integrado en la app (sin diálogos del navegador).
             try {
                 const [uRes, gRes] = await Promise.all([fetch('/api/users'), fetch('/api/gallery')]);
                 const users = uRes.ok ? await uRes.json() : [];
@@ -199,13 +204,12 @@
                 (Array.isArray(photos) ? photos : []).forEach(p => { if (p && p.user) taken.add(normalizeName(p.user)); });
 
                 if (taken.has(key)) {
-                    const ok = confirm(
-                        '⚠️ El nombre «' + name + '» ya está en la lista de invitados.\n\n' +
-                        '¿Seguro que eres tú?\n\n' +
-                        '• Aceptar → es tu nombre y vuelves a entrar (seguirás donde lo dejaste).\n' +
-                        '• Cancelar → no eres tú: usa otro nombre identificativo.'
-                    );
-                    if (!ok) { usernameInput.focus(); return; }
+                    const ok = await showNameConfirm(name);
+                    if (!ok) {
+                        delete btnStart.dataset.busy;
+                        usernameInput.focus();
+                        return;
+                    }
                 }
             } catch (e) { /* sin comprobación disponible: no bloqueamos */ }
 
@@ -215,6 +219,7 @@
             registerUser(name);
             await syncFromCloud();
             saveState();
+            delete btnStart.dataset.busy;
             // Si ya tiene todos los retos hechos, directamente a la pantalla final
             if (state.completedChallenges.length >= CHALLENGES.length) {
                 showCompleteScreen();
@@ -222,6 +227,41 @@
             }
             renderCarousel();
             navigateTo('challenges');
+
+            // Mensaje "¿seguro que eres tú?" integrado en la aplicación
+            function showNameConfirm(personName) {
+                return new Promise(resolve => {
+                    const overlay = $('#name-confirm');
+                    const title = $('#name-confirm-title');
+                    const text = $('#name-confirm-text');
+                    if (!overlay) { resolve(true); return; }
+
+                    title.textContent = `El nombre «${personName}» ya está en la lista de invitados`;
+                    text.textContent = '¿Seguro que eres tú? Si vas a seguir donde lo dejaste, es tu nombre. Si eres otra persona, usa otro nombre identificativo para no mezclar fotos.';
+                    overlay.classList.add('active');
+
+                    const yes = $('#name-confirm-yes');
+                    const no = $('#name-confirm-no');
+                    const finish = (val) => {
+                        overlay.classList.remove('active');
+                        yes.removeEventListener('click', onYes);
+                        no.removeEventListener('click', onNo);
+                        overlay.removeEventListener('click', onBackdrop);
+                        document.removeEventListener('keydown', onKey);
+                        resolve(val);
+                    };
+                    const onYes = () => finish(true);
+                    const onNo = () => finish(false);
+                    const onBackdrop = (e) => { if (e.target === overlay) finish(false); };
+                    const onKey = (e) => { if (e.key === 'Escape') finish(false); };
+
+                    yes.addEventListener('click', onYes);
+                    no.addEventListener('click', onNo);
+                    overlay.addEventListener('click', onBackdrop);
+                    document.addEventListener('keydown', onKey);
+                    yes.focus();
+                });
+            }
         });
 
         usernameInput.addEventListener('keydown', (e) => {
