@@ -173,9 +173,42 @@
             btnStart.disabled = usernameInput.value.trim().length < 2;
         });
 
+        // Primera vez: pista sobre cómo debe ser el nombre
+        usernameInput.addEventListener('focus', () => {
+            try {
+                if (!localStorage.getItem('gymkana_boda_hint_seen')) {
+                    showToast('Pon un nombre identificativo: con él se reconocerán tus fotos 😊', 4500);
+                    localStorage.setItem('gymkana_boda_hint_seen', '1');
+                }
+            } catch (e) {}
+        });
+
         btnStart.addEventListener('click', async () => {
             const name = usernameInput.value.trim();
             if (name.length < 2) return;
+            const key = normalizeName(name);
+
+            // ¿Ese nombre ya está en uso? Preguntamos si de verdad es
+            // la misma persona antes de continuar.
+            try {
+                const [uRes, gRes] = await Promise.all([fetch('/api/users'), fetch('/api/gallery')]);
+                const users = uRes.ok ? await uRes.json() : [];
+                const photos = gRes.ok ? await gRes.json() : [];
+                const taken = new Set();
+                (Array.isArray(users) ? users : []).forEach(u => { if (u && u.name) taken.add(normalizeName(u.name)); });
+                (Array.isArray(photos) ? photos : []).forEach(p => { if (p && p.user) taken.add(normalizeName(p.user)); });
+
+                if (taken.has(key)) {
+                    const ok = confirm(
+                        '⚠️ El nombre «' + name + '» ya está en la lista de invitados.\n\n' +
+                        '¿Seguro que eres tú?\n\n' +
+                        '• Aceptar → es tu nombre y vuelves a entrar (seguirás donde lo dejaste).\n' +
+                        '• Cancelar → no eres tú: usa otro nombre identificativo.'
+                    );
+                    if (!ok) { usernameInput.focus(); return; }
+                }
+            } catch (e) { /* sin comprobación disponible: no bloqueamos */ }
+
             state.username = name;
             loadState();
             state.username = name;
@@ -202,7 +235,10 @@
             showToast('Tu progreso se ha guardado');
         });
 
-        $('#btn-back').addEventListener('click', () => navigateTo('challenges'));
+        $('#btn-back').addEventListener('click', () => {
+            renderCarousel();
+            navigateTo('challenges');
+        });
 
         const uploadArea = $('#upload-area');
         const fileInputGallery = $('#file-input-gallery');
@@ -260,6 +296,7 @@
         $('#btn-restart').addEventListener('click', () => {
             selectedPhotos.clear();
             isSelectMode = false;
+            updateSelectLabel();
             navigateTo('challenges');
             renderCarousel();
         });
@@ -269,18 +306,35 @@
             downloadPhotos(allIds);
         });
 
+        // Selección: la primera vez entra en modo selección; si ya lo
+        // está y hay fotos elegidas, las descarga.
         $('#btn-select-download').addEventListener('click', () => {
+            if (!isSelectMode) {
+                toggleSelectMode();
+                return;
+            }
+            if (selectedPhotos.size === 0) {
+                showToast('Toca primero las fotos que quieras descargar');
+                return;
+            }
+            const ids = [...selectedPhotos];
             toggleSelectMode();
+            downloadPhotos(ids);
         });
 
-        // Galería de la fiesta y lightbox
+        // Galería de la fiesta, lightbox y clasificación
         $('#btn-refresh-gallery').addEventListener('click', loadPartyGallery);
         $('#lightbox-close').addEventListener('click', closeLightbox);
         $('#photo-lightbox').addEventListener('click', (e) => {
             if (e.target.id === 'photo-lightbox') closeLightbox();
         });
+        $('#btn-leaderboard').addEventListener('click', openLeaderboard);
+        $('#leaderboard-close').addEventListener('click', closeLeaderboard);
+        $('#leaderboard-overlay').addEventListener('click', (e) => {
+            if (e.target.id === 'leaderboard-overlay') closeLeaderboard();
+        });
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'Escape') { closeLightbox(); closeLeaderboard(); }
         });
 
         // Carrusel: scroll y rueda, registrados UNA sola vez
@@ -534,16 +588,14 @@
             showToast('Reto completado', 2000, 'success');
 
             if (state.completedChallenges.length === CHALLENGES.length) {
-                setTimeout(() => showCompleteScreen(), 800);
+                setTimeout(() => showCompleteScreen(), 900);
             } else {
-                setTimeout(() => {
-                    const nextChallenge = CHALLENGES.find(c => !state.completedChallenges.includes(c.id));
-                    if (nextChallenge) {
-                        navigateTo('challenges');
-                        renderCarousel();
-                        setTimeout(() => openChallenge(nextChallenge), 300);
-                    }
-                }, 1000);
+                const nextChallenge = CHALLENGES.find(c => !state.completedChallenges.includes(c.id));
+                if (nextChallenge) {
+                    // Transición suave: cambiamos el contenido en la misma
+                    // pantalla (con su animación) en vez de saltar al carrusel
+                    setTimeout(() => openChallenge(nextChallenge), 800);
+                }
             }
         } catch (error) {
             console.error('Upload error:', error);
@@ -581,6 +633,9 @@
 
         renderCompleteGallery();
         loadPartyGallery();
+        const lbSection = $('#leaderboard-section');
+        if (lbSection) lbSection.hidden = false;
+        loadLeaderboard();
         createConfetti();
         navigateTo('complete');
     }
@@ -614,47 +669,110 @@
         } else {
             selectedPhotos.add(id);
         }
+        updateSelectLabel();
         renderCompleteGallery();
     }
 
     function toggleSelectMode() {
         isSelectMode = !isSelectMode;
         selectedPhotos.clear();
-        const btn = $('#btn-select-download');
+        updateSelectLabel();
         if (isSelectMode) {
-            btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Descargar seleccionadas (${selectedPhotos.size})`;
-            $('#btn-download-all').style.display = 'none';
-        } else {
-            btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Seleccionar fotos`;
-            $('#btn-download-all').style.display = '';
+            showToast('Toca las fotos que quieras descargar', 3000);
         }
         renderCompleteGallery();
     }
 
+    function updateSelectLabel() {
+        const btn = $('#btn-select-download');
+        const all = $('#btn-download-all');
+        if (!btn) return;
+        const check = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
+        if (isSelectMode) {
+            btn.innerHTML = `${check} Descargar seleccionadas (${selectedPhotos.size})`;
+            if (all) all.style.display = 'none';
+        } else {
+            btn.innerHTML = `${check} Seleccionar fotos`;
+            if (all) all.style.display = '';
+        }
+    }
+
+    // ── DESCARGA ─────────────────────────────────────────────
+    // Cloudinary no respeta el atributo `download` con URL de otro
+    // dominio (abría pestañas o lo bloqueaba el navegador), así que
+    // traemos cada foto como blob y las juntamos en un ZIP: una sola
+    // descarga, sin pestañas y con nombres ordenados.
+    async function fetchPhotoBlob(url) {
+        if (url.indexOf('data:') === 0) {
+            return await (await fetch(url)).blob();
+        }
+        const r = await fetch(url, { mode: 'cors' });
+        if (!r.ok) throw new Error('No se pudo descargar una foto');
+        return await r.blob();
+    }
+
+    function triggerDownload(blob, filename) {
+        const a = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 8000);
+    }
+
     async function downloadPhotos(ids) {
-        for (const id of ids) {
-            const photo = state.photos[id];
-            if (!photo) continue;
-            const link = document.createElement('a');
-            link.href = photo.url;
-            link.download = photo.fileName || `reto_${id}.jpg`;
-            link.target = '_blank';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            await new Promise(r => setTimeout(r, 300));
+        const valid = ids.filter(id => state.photos[id]);
+        if (valid.length === 0) { showToast('No hay fotos para descargar'); return; }
+
+        showToast(`Preparando ${valid.length} foto${valid.length > 1 ? 's' : ''}…`, 20000);
+        try {
+            if (window.JSZip) {
+                const zip = new JSZip();
+                const used = {};
+                for (const id of valid) {
+                    const photo = state.photos[id];
+                    const challenge = CHALLENGES.find(c => c.id === id);
+                    const blob = await fetchPhotoBlob(photo.url);
+                    const m = photo.url.split('?')[0].match(/\.(png|jpe?g|webp|gif)$/i);
+                    const ext = m ? m[1].toLowerCase() : 'jpg';
+                    let base = (challenge && challenge.filename) || photo.fileName || ('reto_' + id);
+                    base = String(base).replace(/\.(png|jpe?g|webp|gif|jpeg)$/i, '');
+                    if (used[base]) { used[base]++; base = base + '_' + used[base]; } else { used[base] = 1; }
+                    zip.file(base + '.' + ext, blob);
+                }
+                const out = await zip.generateAsync({ type: 'blob' });
+                triggerDownload(out, 'gymkana-fotografica.zip');
+            } else {
+                // Respaldo si no carga la librería del ZIP
+                for (const id of valid) {
+                    const photo = state.photos[id];
+                    const blob = await fetchPhotoBlob(photo.url);
+                    triggerDownload(blob, `reto_${id}.jpg`);
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
+            showToast('Descarga iniciada ✓', 3000, 'success');
+        } catch (e) {
+            console.error('Download error:', e);
+            showToast(`Error al descargar: ${e.message}`, 4000);
         }
     }
 
     // ── GALERÍA DE LA FIESTA ─────────────────────────────────
     let partyPhotos = [];
+    let partyPage = 1;
+    const PARTY_PAGE_SIZE = 12;
 
     async function loadPartyGallery() {
         const wrap = $('#party-gallery-wrap');
         const grid = $('#party-gallery');
+        const pager = $('#party-pager');
         if (!wrap || !grid) return;
         wrap.hidden = false;
         grid.innerHTML = '<p class="party-loading">Cargando fotos…</p>';
+        if (pager) pager.innerHTML = '';
         try {
             const res = await fetch('/api/gallery');
             if (!res.ok) throw new Error('Error cargando la galería');
@@ -662,29 +780,56 @@
             if (!Array.isArray(photos)) throw new Error('Respuesta no válida');
             photos.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
             partyPhotos = photos;
+            partyPage = 1;
 
             if (partyPhotos.length === 0) {
                 grid.innerHTML = '<p class="party-empty">Todavía no hay fotos en la galería.</p>';
                 return;
             }
-
-            grid.innerHTML = partyPhotos.map((p, i) => {
-                const who = p.user ? `👤 ${escapeHtml(p.user)}` : '👤 Invitado';
-                return `
-                    <figure class="party-photo" data-i="${i}">
-                        <img src="${escapeHtml(p.thumb || p.url)}" alt="${who}" loading="lazy">
-                        <figcaption class="party-badge">${who}</figcaption>
-                    </figure>
-                `;
-            }).join('');
-
-            grid.querySelectorAll('.party-photo').forEach(fig => {
-                fig.addEventListener('click', () => {
-                    openLightbox(partyPhotos[parseInt(fig.dataset.i, 10)]);
-                });
-            });
+            renderPartyPage();
         } catch (e) {
             grid.innerHTML = '<p class="party-empty">No se pudo cargar la galería. Pulsa «Actualizar».</p>';
+        }
+    }
+
+    function renderPartyPage() {
+        const grid = $('#party-gallery');
+        const pager = $('#party-pager');
+        if (!grid) return;
+
+        const pages = Math.max(1, Math.ceil(partyPhotos.length / PARTY_PAGE_SIZE));
+        if (partyPage > pages) partyPage = pages;
+        if (partyPage < 1) partyPage = 1;
+
+        const start = (partyPage - 1) * PARTY_PAGE_SIZE;
+        const slice = partyPhotos.slice(start, start + PARTY_PAGE_SIZE);
+
+        grid.innerHTML = slice.map((p, i) => {
+            const who = p.user ? `👤 ${escapeHtml(p.user)}` : '👤 Invitado';
+            return `
+                <figure class="party-photo" data-i="${start + i}">
+                    <img src="${escapeHtml(p.thumb || p.url)}" alt="${who}" loading="lazy">
+                    <figcaption class="party-badge">${who}</figcaption>
+                </figure>
+            `;
+        }).join('');
+
+        grid.querySelectorAll('.party-photo').forEach(fig => {
+            fig.addEventListener('click', () => {
+                openLightbox(partyPhotos[parseInt(fig.dataset.i, 10)]);
+            });
+        });
+
+        if (pager) {
+            pager.innerHTML = pages > 1 ? `
+                <button class="pager-btn" id="pager-prev" aria-label="Página anterior" ${partyPage === 1 ? 'disabled' : ''}>&lsaquo;</button>
+                <span class="pager-info">${partyPage} / ${pages}</span>
+                <button class="pager-btn" id="pager-next" aria-label="Página siguiente" ${partyPage === pages ? 'disabled' : ''}>&rsaquo;</button>
+            ` : '';
+            const prev = document.getElementById('pager-prev');
+            const next = document.getElementById('pager-next');
+            if (prev) prev.addEventListener('click', () => { partyPage--; renderPartyPage(); });
+            if (next) next.addEventListener('click', () => { partyPage++; renderPartyPage(); });
         }
     }
 
@@ -702,6 +847,111 @@
     function closeLightbox() {
         const box = $('#photo-lightbox');
         if (box) box.classList.remove('active');
+    }
+
+    // ── CLASIFICACIÓN ────────────────────────────────────────
+    // Orden: más retos primero; a igualdad, quien lo alcanzó antes
+    // (su última foto más antigua) — es decir, quien va ganando.
+    function buildRanking(users, photos) {
+        const map = new Map();
+        users.forEach(u => {
+            const k = normalizeName(u && u.name);
+            if (!k) return;
+            map.set(k, { name: String(u.name), progress: 0, last: '', registered: u.registered || '' });
+        });
+        photos.forEach(p => {
+            const k = normalizeName(p && p.user);
+            if (!k) return;
+            let e = map.get(k);
+            if (!e) {
+                e = { name: String(p.user), progress: 0, last: '', registered: '' };
+                map.set(k, e);
+            }
+            e.progress++;
+            const created = p.createdAt || '';
+            if (created > e.last) e.last = created;
+        });
+
+        const arr = [...map.values()];
+        arr.forEach(e => { e.progress = Math.min(CHALLENGES.length, e.progress); });
+        arr.sort((a, b) => {
+            if (b.progress !== a.progress) return b.progress - a.progress;
+            if (a.last && b.last && a.last !== b.last) return a.last < b.last ? -1 : 1;
+            return String(a.registered).localeCompare(String(b.registered));
+        });
+        return arr;
+    }
+
+    async function loadLeaderboard() {
+        renderLeaderboard(null, true);
+        try {
+            const [uRes, gRes] = await Promise.all([fetch('/api/users'), fetch('/api/gallery')]);
+            const users = uRes.ok ? await uRes.json() : [];
+            const photos = gRes.ok ? await gRes.json() : [];
+            renderLeaderboard(buildRanking(
+                Array.isArray(users) ? users : [],
+                Array.isArray(photos) ? photos : []
+            ));
+        } catch (e) {
+            renderLeaderboard(null, false, true);
+        }
+    }
+
+    function renderLeaderboard(list, loading, error) {
+        const mine = state.username ? normalizeName(state.username) : '';
+        let html = '';
+        let subtitle = 'Quién va primero en la gymkana';
+
+        if (loading) {
+            html = '<p class="lb-loading">Cargando clasificación…</p>';
+        } else if (error) {
+            html = '<p class="lb-empty">No se pudo cargar la clasificación.</p>';
+        } else if (!list || list.length === 0) {
+            html = '<p class="lb-empty">Todavía no hay participantes.</p>';
+        } else {
+            let myRank = 0;
+            html = list.map((e, i) => {
+                const isMe = mine && normalizeName(e.name) === mine;
+                if (isMe) myRank = i + 1;
+                const pos = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1);
+                const pct = Math.round((e.progress / CHALLENGES.length) * 100);
+                const done = e.progress >= CHALLENGES.length;
+                return `
+                    <div class="lb-row ${isMe ? 'me' : ''}">
+                        <span class="lb-pos">${pos}</span>
+                        <span class="lb-name">${escapeHtml(e.name)}${isMe ? '<span class="lb-you">TÚ</span>' : ''}</span>
+                        <span class="lb-prog">${e.progress}/${CHALLENGES.length}${done ? ' · 🏁' : ''}</span>
+                        <span class="lb-bar"><i style="width:${pct}%"></i></span>
+                    </div>
+                `;
+            }).join('');
+            subtitle = (mine && myRank)
+                ? `Tu puesto: ${myRank}º de ${list.length} · ${list.length} participantes`
+                : (mine
+                    ? `${list.length} participantes · tú todavía sin fotos`
+                    : `${list.length} participantes`);
+        }
+
+        ['lb-list-overlay', 'lb-list-complete'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
+        });
+        ['lb-sub-overlay', 'lb-sub-complete'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = subtitle;
+        });
+    }
+
+    function openLeaderboard() {
+        const ov = $('#leaderboard-overlay');
+        if (!ov) return;
+        ov.classList.add('active');
+        loadLeaderboard();
+    }
+
+    function closeLeaderboard() {
+        const ov = $('#leaderboard-overlay');
+        if (ov) ov.classList.remove('active');
     }
 
     // ── CONFETTI ─────────────────────────────────────────────
