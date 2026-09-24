@@ -1646,11 +1646,15 @@ body::before {
     position: fixed;
     inset: 0;
     z-index: 9996;
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: center;
     padding: 1.5rem;
     pointer-events: none;
+}
+
+.done-overlay.active {
+    display: flex;
 }
 
 .done-card {
