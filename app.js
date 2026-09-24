@@ -334,33 +334,26 @@
         $('#btn-submit').addEventListener('click', submitPhoto);
 
         $('#btn-restart').addEventListener('click', () => {
-            selectedPhotos.clear();
-            isSelectMode = false;
-            updateSelectLabel();
             navigateTo('challenges');
             renderCarousel();
         });
 
-        $('#btn-download-all').addEventListener('click', () => {
-            const allIds = CHALLENGES.filter(c => state.photos[c.id]).map(c => c.id);
-            downloadPhotos(allIds);
-        });
+        // Descarga: se abre el selector con las fotos visibles para
+        // verlas y elegir cuáles (o todas). También para la fiesta.
+        $('#btn-download-all').addEventListener('click', () => openDownloadModal('mine'));
+        const btnDlParty = $('#btn-download-party');
+        if (btnDlParty) btnDlParty.addEventListener('click', () => openDownloadModal('party'));
 
-        // Selección: la primera vez entra en modo selección; si ya lo
-        // está y hay fotos elegidas, las descarga.
-        $('#btn-select-download').addEventListener('click', () => {
-            if (!isSelectMode) {
-                toggleSelectMode();
-                return;
-            }
-            if (selectedPhotos.size === 0) {
-                showToast('Toca primero las fotos que quieras descargar');
-                return;
-            }
-            const ids = [...selectedPhotos];
-            toggleSelectMode();
-            downloadPhotos(ids);
+        $('#dl-close').addEventListener('click', closeDownloadModal);
+        $('#dl-backdrop').addEventListener('click', closeDownloadModal);
+        $('#dl-select-all').addEventListener('click', () => {
+            const items = dlItems();
+            if (items.length > 0 && dlSelected.size === items.length) dlSelected.clear();
+            else items.forEach(it => dlSelected.add(it.key));
+            renderDlGrid();
+            updateDlActions();
         });
+        $('#dl-go').addEventListener('click', downloadSelected);
 
         // Galería de la fiesta, lightbox y clasificación
         $('#btn-refresh-gallery').addEventListener('click', loadPartyGallery);
@@ -374,7 +367,12 @@
             if (e.target.id === 'leaderboard-overlay') closeLeaderboard();
         });
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') { closeLightbox(); closeLeaderboard(); }
+            if (e.key !== 'Escape') return;
+            // Si el lightbox está encima, solo se cierra ese
+            const lb = $('#photo-lightbox');
+            if (lb && lb.classList.contains('active')) { closeLightbox(); return; }
+            closeLeaderboard();
+            closeDownloadModal();
         });
 
         // Carrusel: scroll y rueda, registrados UNA sola vez
@@ -625,16 +623,17 @@
             state.photos[challenge.id] = { url: result.secure_url, fileName: challenge.filename };
             saveState();
 
-            showToast('Reto completado', 2000, 'success');
+            // Aviso "reto completado" centrado en medio de la página
+            showDoneOverlay(challenge);
 
             if (state.completedChallenges.length === CHALLENGES.length) {
-                setTimeout(() => showCompleteScreen(), 900);
+                setTimeout(() => showCompleteScreen(), 1700);
             } else {
                 const nextChallenge = CHALLENGES.find(c => !state.completedChallenges.includes(c.id));
                 if (nextChallenge) {
                     // Transición suave: cambiamos el contenido en la misma
                     // pantalla (con su animación) en vez de saltar al carrusel
-                    setTimeout(() => openChallenge(nextChallenge), 800);
+                    setTimeout(() => openChallenge(nextChallenge), 1500);
                 }
             }
         } catch (error) {
@@ -646,10 +645,20 @@
         }
     }
 
-    // ── COMPLETE SCREEN ──────────────────────────────────────
-    let selectedPhotos = new Set();
-    let isSelectMode = false;
+    // ── AVISO "RETO COMPLETADO" — en medio de la página ─────
+    let doneTimer = null;
 
+    function showDoneOverlay(challenge) {
+        const ov = $('#done-overlay');
+        if (!ov) { showToast('Reto completado', 2000, 'success'); return; }
+        $('#done-title').textContent = '¡Reto completado!';
+        $('#done-sub').textContent = challenge ? `${challenge.emoji} ${challenge.title}` : '';
+        ov.classList.add('active');
+        clearTimeout(doneTimer);
+        doneTimer = setTimeout(() => ov.classList.remove('active'), 1400);
+    }
+
+    // ── COMPLETE SCREEN ──────────────────────────────────────
     function showCompleteScreen() {
         const total = CHALLENGES.length;
         const completed = state.completedChallenges.length;
@@ -684,10 +693,8 @@
         const galleryHTML = CHALLENGES.map(c => {
             const photo = state.photos[c.id];
             if (!photo) return '';
-            const isSelected = selectedPhotos.has(c.id);
             return `
-                <div class="gallery-item ${isSelected ? 'selected' : ''}" data-id="${c.id}">
-                    <div class="gallery-checkbox">${isSelected ? '&#10003;' : ''}</div>
+                <div class="gallery-item" data-id="${c.id}">
                     <img src="${photo.url}" alt="${c.title}" loading="lazy">
                     <div class="gallery-item-label">${c.title}</div>
                 </div>
@@ -695,63 +702,157 @@
         }).join('');
         $('#complete-gallery').innerHTML = galleryHTML;
 
-        if (isSelectMode) {
-            $('#complete-gallery').addEventListener('click', handleGalleryClick);
-        }
+        // Tocar una foto propia la abre en grande
+        $('#complete-gallery').querySelectorAll('.gallery-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const id = parseInt(item.dataset.id, 10);
+                openLightbox({ url: state.photos[id].url, user: state.username, reto: id });
+            });
+        });
     }
 
-    function handleGalleryClick(e) {
-        const item = e.target.closest('.gallery-item');
-        if (!item) return;
-        const id = parseInt(item.dataset.id);
-        if (selectedPhotos.has(id)) {
-            selectedPhotos.delete(id);
-        } else {
-            selectedPhotos.add(id);
+    // ── MODAL DE SELECCIÓN Y DESCARGA ───────────────────────
+    // Muestra las fotos para verlas y elegir cuáles descargar:
+    // las propias ("mine") o las de toda la fiesta ("party").
+    // Siempre se pueden seleccionar todas de una vez.
+    let dlSource = 'mine';
+    let dlSelected = new Set();
+    let dlBusy = false;
+
+    function dlItems() {
+        if (dlSource === 'party') {
+            return partyPhotos.map((p, i) => {
+                const who = p.user || 'Invitado';
+                const slug = normalizeName(who).replace(/[^\w\s-]/g, '').replace(/\s+/g, '-') || 'invitado';
+                return {
+                    key: 'p' + i,
+                    thumb: p.thumb || p.url,
+                    full: p.url,
+                    title: who,
+                    user: who,
+                    reto: p.reto,
+                    base: `Fiesta_${slug}_Reto_${p.reto != null ? p.reto : 'x'}`
+                };
+            });
         }
-        updateSelectLabel();
-        renderCompleteGallery();
+        return CHALLENGES.filter(c => state.photos[c.id]).map(c => ({
+            key: 'c' + c.id,
+            thumb: state.photos[c.id].url,
+            full: state.photos[c.id].url,
+            title: c.title,
+            user: state.username,
+            reto: c.id,
+            base: c.filename
+        }));
     }
 
-    function toggleSelectMode() {
-        isSelectMode = !isSelectMode;
-        selectedPhotos.clear();
-        updateSelectLabel();
-        if (isSelectMode) {
-            showToast('Toca las fotos que quieras descargar', 3000);
+    function openDownloadModal(source) {
+        dlSource = source;
+        dlSelected = new Set();
+        const items = dlItems();
+        if (items.length === 0) {
+            showToast(source === 'party' ? 'Todavía no hay fotos en la galería' : 'Todavía no has subido fotos');
+            return;
         }
-        renderCompleteGallery();
+        // Empieza con todas seleccionadas (se pueden ir desmarcando)
+        items.forEach(it => dlSelected.add(it.key));
+        $('#dl-title').textContent = source === 'party' ? 'Fotos de la fiesta' : 'Mis fotos';
+        $('#dl-sub').textContent = 'Toca las fotos para elegir · 👁 para verlas en grande';
+        $('#dl-progress').hidden = true;
+        renderDlGrid();
+        updateDlActions();
+        $('#dl-modal').classList.add('active');
     }
 
-    function updateSelectLabel() {
-        const btn = $('#btn-select-download');
-        const all = $('#btn-download-all');
-        if (!btn) return;
-        const check = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
-        if (isSelectMode) {
-            btn.innerHTML = `${check} Descargar seleccionadas (${selectedPhotos.size})`;
-            if (all) all.style.display = 'none';
-        } else {
-            btn.innerHTML = `${check} Seleccionar fotos`;
-            if (all) all.style.display = '';
-        }
+    function closeDownloadModal() {
+        const m = $('#dl-modal');
+        if (m) m.classList.remove('active');
+    }
+
+    function renderDlGrid() {
+        const grid = $('#dl-grid');
+        if (!grid) return;
+        const items = dlItems();
+        grid.innerHTML = items.map(it => `
+            <figure class="dl-item ${dlSelected.has(it.key) ? 'selected' : ''}" data-key="${it.key}">
+                <img src="${escapeHtml(it.thumb)}" alt="${escapeHtml(it.title)}" loading="lazy">
+                <span class="dl-check" aria-hidden="true">&#10003;</span>
+                <button type="button" class="dl-view" title="Ver foto" aria-label="Ver foto">&#128065;</button>
+            </figure>
+        `).join('');
+
+        grid.querySelectorAll('.dl-item').forEach(fig => {
+            fig.addEventListener('click', (e) => {
+                const key = fig.dataset.key;
+                if (e.target.closest('.dl-view')) {
+                    const it = dlItems().find(x => x.key === key);
+                    if (it) openLightbox({ url: it.full, user: it.user, reto: it.reto });
+                    return;
+                }
+                if (dlSelected.has(key)) dlSelected.delete(key);
+                else dlSelected.add(key);
+                fig.classList.toggle('selected');
+                updateDlActions();
+            });
+        });
+    }
+
+    function updateDlActions() {
+        const go = $('#dl-go');
+        const all = $('#dl-select-all');
+        if (!go || !all) return;
+        const items = dlItems();
+        const n = dlSelected.size;
+        const icon = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
+        go.innerHTML = n === 0 ? 'Elige alguna foto' : `${icon} Descargar (${n})`;
+        go.disabled = n === 0 || dlBusy;
+        all.textContent = (items.length > 0 && n === items.length) ? 'No seleccionar ninguna' : 'Seleccionar todas';
+        all.disabled = dlBusy;
     }
 
     // ── DESCARGA ─────────────────────────────────────────────
     // Cloudinary no respeta el atributo `download` con URL de otro
     // dominio (abría pestañas o lo bloqueaba el navegador), así que
-    // traemos cada foto como blob y las juntamos en un ZIP: una sola
-    // descarga, sin pestañas y con nombres ordenados.
+    // traemos cada foto como blob y la entregamos como archivo:
+    // en el móvil se abre el compartir del sistema (guardar/abrir)
+    // y en el ordenador se descarga. Cada imagen se valida antes.
     async function fetchPhotoBlob(url) {
         if (url.indexOf('data:') === 0) {
             return await (await fetch(url)).blob();
         }
         const r = await fetch(url, { mode: 'cors' });
         if (!r.ok) throw new Error('No se pudo descargar una foto');
-        return await r.blob();
+        const blob = await r.blob();
+        const type = blob.type || '';
+        if (type && type.indexOf('image/') !== 0 && type.indexOf('application/octet-stream') === -1) {
+            throw new Error('Una foto no se pudo leer correctamente');
+        }
+        return blob;
     }
 
-    function triggerDownload(blob, filename) {
+    function extFrom(blob, url) {
+        const m = String(url || '').split('?')[0].match(/\.(png|jpe?g|webp|gif)$/i);
+        if (m) return m[1].toLowerCase() === 'jpeg' ? 'jpg' : m[1].toLowerCase();
+        const t = (blob.type || '').split('/')[1] || '';
+        if (t === 'jpeg') return 'jpg';
+        if (['png', 'webp', 'gif', 'avif'].indexOf(t) !== -1) return t;
+        return 'jpg';
+    }
+
+    // Entrega el archivo al usuario. En el móvil primero intenta el
+    // compartir del sistema (Guardar en Fotos/Archivos o abrirlo) y,
+    // si no existe, hace la descarga normal sin caducar el blob.
+    async function deliverFile(blob, filename) {
+        try {
+            const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: filename });
+                return;
+            }
+        } catch (e) {
+            if (e && e.name === 'AbortError') throw e; // cancelado por el usuario
+            // Otro fallo del compartir → se intenta la descarga normal
+        }
         const a = document.createElement('a');
         const url = URL.createObjectURL(blob);
         a.href = url;
@@ -759,44 +860,56 @@
         document.body.appendChild(a);
         a.click();
         a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 8000);
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
 
-    async function downloadPhotos(ids) {
-        const valid = ids.filter(id => state.photos[id]);
-        if (valid.length === 0) { showToast('No hay fotos para descargar'); return; }
+    async function downloadSelected() {
+        if (dlBusy) return;
+        const items = dlItems().filter(it => dlSelected.has(it.key));
+        if (items.length === 0) { showToast('Toca primero las fotos que quieras descargar'); return; }
 
-        showToast(`Preparando ${valid.length} foto${valid.length > 1 ? 's' : ''}…`, 20000);
+        dlBusy = true;
+        const progress = $('#dl-progress');
+        const progressText = $('#dl-progress-text');
+        progress.hidden = false;
+        updateDlActions();
+
         try {
-            if (window.JSZip) {
+            if (items.length === 1) {
+                // Una sola foto: se entrega tal cual, sin ZIP
+                progressText.textContent = 'Preparando foto…';
+                const it = items[0];
+                const blob = await fetchPhotoBlob(it.full);
+                await deliverFile(blob, `${it.base}.${extFrom(blob, it.full)}`);
+            } else {
+                if (!window.JSZip) throw new Error('No se pudo cargar la librería del ZIP');
                 const zip = new JSZip();
                 const used = {};
-                for (const id of valid) {
-                    const photo = state.photos[id];
-                    const challenge = CHALLENGES.find(c => c.id === id);
-                    const blob = await fetchPhotoBlob(photo.url);
-                    const m = photo.url.split('?')[0].match(/\.(png|jpe?g|webp|gif)$/i);
-                    const ext = m ? m[1].toLowerCase() : 'jpg';
-                    let base = (challenge && challenge.filename) || photo.fileName || ('reto_' + id);
-                    base = String(base).replace(/\.(png|jpe?g|webp|gif|jpeg)$/i, '');
-                    if (used[base]) { used[base]++; base = base + '_' + used[base]; } else { used[base] = 1; }
-                    zip.file(base + '.' + ext, blob);
+                for (let i = 0; i < items.length; i++) {
+                    const it = items[i];
+                    progressText.textContent = `Preparando ${i + 1}/${items.length}…`;
+                    const blob = await fetchPhotoBlob(it.full);
+                    let base = it.base;
+                    if (used[base]) { used[base]++; base = `${base}_${used[base]}`; } else { used[base] = 1; }
+                    zip.file(`${base}.${extFrom(blob, it.full)}`, blob);
                 }
+                progressText.textContent = 'Creando el ZIP…';
                 const out = await zip.generateAsync({ type: 'blob' });
-                triggerDownload(out, 'gymkana-fotografica.zip');
-            } else {
-                // Respaldo si no carga la librería del ZIP
-                for (const id of valid) {
-                    const photo = state.photos[id];
-                    const blob = await fetchPhotoBlob(photo.url);
-                    triggerDownload(blob, `reto_${id}.jpg`);
-                    await new Promise(r => setTimeout(r, 500));
-                }
+                await deliverFile(out, 'gymkana-fotografica.zip');
             }
+            closeDownloadModal();
             showToast('Descarga iniciada ✓', 3000, 'success');
         } catch (e) {
-            console.error('Download error:', e);
-            showToast(`Error al descargar: ${e.message}`, 4000);
+            if (e && e.name === 'AbortError') {
+                showToast('Descarga cancelada', 2500);
+            } else {
+                console.error('Download error:', e);
+                showToast(`Error al descargar: ${e.message}`, 4000);
+            }
+        } finally {
+            dlBusy = false;
+            progress.hidden = true;
+            updateDlActions();
         }
     }
 

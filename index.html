@@ -30,7 +30,7 @@
                     <input type="text" id="username-input" placeholder="¿Cómo te llamas?" maxlength="30" autocomplete="off">
                     <button id="btn-start" class="btn-primary" disabled>Empezar</button>
                 </div>
-                <p class="welcome-hint">Pon un nombre identificativo — si ya existe, te confirmaremos que eres tú</p>
+                <p class="welcome-hint">Pon un nombre que te identifique. Si ya existe te avisaremos y deberás confirmar si eres tu o no.</p>
             </div>
         </div>
     </div>
@@ -126,11 +126,7 @@
             <div class="complete-actions">
                 <button class="btn-primary" id="btn-download-all" style="max-width:380px; width:100%;">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    Descargar todas
-                </button>
-                <button class="btn-secondary" id="btn-select-download" style="max-width:380px; width:100%;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                    Seleccionar fotos
+                    Descargar mis fotos
                 </button>
                 <button class="btn-primary" id="btn-restart" style="max-width:380px; width:100%;">Volver a empezar</button>
             </div>
@@ -140,7 +136,13 @@
                 <p class="party-gallery-sub">Todas las fotos subidas por los invitados</p>
                 <div class="party-gallery" id="party-gallery"></div>
                 <div class="party-pager" id="party-pager"></div>
-                <button class="btn-secondary" id="btn-refresh-gallery" style="max-width:380px; width:100%; margin-top: 1rem;">Actualizar</button>
+                <div class="party-actions">
+                    <button class="btn-secondary" id="btn-download-party" style="width:100%;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Descargar fotos de la fiesta
+                    </button>
+                    <button class="btn-secondary" id="btn-refresh-gallery" style="width:100%;">Actualizar</button>
+                </div>
             </section>
 
             <section class="leaderboard-section" id="leaderboard-section" hidden>
@@ -152,6 +154,33 @@
     </div>
 
     <div id="toast" class="toast"></div>
+
+    <!-- Aviso "reto completado" — centrado en medio de la página -->
+    <div class="done-overlay" id="done-overlay">
+        <div class="done-card">
+            <div class="done-emoji">✅</div>
+            <div class="done-title" id="done-title">¡Reto completado!</div>
+            <div class="done-sub" id="done-sub"></div>
+        </div>
+    </div>
+
+    <!-- Selector de fotos para descargar (mías o de la fiesta) -->
+    <div class="dl-overlay" id="dl-modal">
+        <div class="dl-backdrop" id="dl-backdrop"></div>
+        <div class="dl-panel">
+            <div class="dl-head">
+                <h3 class="dl-title" id="dl-title">Mis fotos</h3>
+                <button class="lightbox-close dl-close" id="dl-close" aria-label="Cerrar">&times;</button>
+            </div>
+            <p class="dl-sub" id="dl-sub"></p>
+            <div class="dl-grid" id="dl-grid"></div>
+            <p class="dl-progress" id="dl-progress" hidden><span id="dl-progress-text">Preparando…</span></p>
+            <div class="dl-actions">
+                <button class="btn-secondary" id="dl-select-all">Seleccionar todas</button>
+                <button class="btn-primary" id="dl-go">Descargar</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Clasificación (overlay) -->
     <div class="leaderboard-overlay" id="leaderboard-overlay">

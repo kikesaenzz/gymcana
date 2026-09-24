@@ -1638,3 +1638,443 @@ body::before {
     padding: 0.85rem 1.5rem;
     margin: 0;
 }
+
+/* ============================================================
+   TANDA 3 — AVISO "RETO COMPLETADO" EN MEDIO DE LA PÁGINA
+   ============================================================ */
+.done-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9996;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    pointer-events: none;
+}
+
+.done-card {
+    padding: 1.8rem 2.4rem;
+    text-align: center;
+    animation: donePop 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+    background: rgba(20, 15, 30, 0.4);
+    backdrop-filter: blur(30px) saturate(1.7);
+    -webkit-backdrop-filter: blur(30px) saturate(1.7);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.done-emoji {
+    font-size: 3rem;
+    animation: doneBounce 0.6s ease;
+}
+
+.done-title {
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 6vw, 2rem);
+    font-style: italic;
+    font-weight: 700;
+    color: var(--white);
+    margin-top: 0.45rem;
+    text-shadow: 0 2px 20px rgba(0, 0, 0, 0.35);
+}
+
+.done-sub {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+    margin-top: 0.35rem;
+}
+
+@keyframes donePop {
+    from { opacity: 0; transform: scale(0.7); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes doneBounce {
+    0%   { transform: scale(0.3); opacity: 0; }
+    60%  { transform: scale(1.15); }
+    100% { transform: scale(1); }
+}
+
+/* ============================================================
+   TANDA 3 — MODAL DE SELECCIÓN Y DESCARGA DE FOTOS
+   ============================================================ */
+.dl-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9994;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1.2rem;
+}
+
+.dl-overlay.active {
+    display: flex;
+}
+
+.dl-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(8, 8, 16, 0.5);
+    backdrop-filter: blur(12px) saturate(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+}
+
+.dl-panel {
+    position: relative;
+    width: min(560px, 100%);
+    max-height: 86vh;
+    max-height: min(86vh, 86dvh);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 1.3rem 1.2rem 1.2rem;
+    background: rgba(20, 15, 30, 0.4);
+    backdrop-filter: blur(30px) saturate(1.7);
+    -webkit-backdrop-filter: blur(30px) saturate(1.7);
+    border: 1px solid rgba(255, 255, 255, 0.26);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    animation: fadeInUp 0.3s ease;
+}
+
+.dl-head {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+}
+
+.dl-title {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    color: var(--white);
+}
+
+.dl-panel .dl-close {
+    position: absolute;
+    top: -0.3rem;
+    right: 0;
+}
+
+.dl-sub {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.55);
+    margin: 0.4rem 0 0.8rem;
+}
+
+.dl-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    overflow-y: auto;
+    min-height: 0;
+    padding: 2px;
+    margin-bottom: 0.9rem;
+    -webkit-overflow-scrolling: touch;
+}
+
+.dl-item {
+    position: relative;
+    margin: 0;
+    aspect-ratio: 1;
+    border-radius: 14px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    transition: border-color 0.2s ease, transform 0.15s ease;
+}
+
+.dl-item:active {
+    transform: scale(0.96);
+}
+
+.dl-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.dl-item.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(127, 184, 158, 0.5);
+}
+
+.dl-check {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1.5px solid rgba(255, 255, 255, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    color: transparent;
+    transition: all 0.2s ease;
+    z-index: 2;
+}
+
+.dl-item.selected .dl-check {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #10231c;
+}
+
+.dl-view {
+    position: absolute;
+    left: 6px;
+    bottom: 6px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: var(--white);
+    font-size: 0.8rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
+
+.dl-view:active {
+    transform: scale(0.9);
+}
+
+.dl-progress {
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.78);
+    text-align: center;
+    padding: 0.55rem 0.8rem;
+    margin-bottom: 0.8rem;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.dl-progress[hidden] {
+    display: none;
+}
+
+.dl-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.dl-actions .btn-primary:disabled {
+    opacity: 0.35;
+}
+
+/* ============================================================
+   TANDA 3 — MENSAJES Y POPUPS MÁS TRANSPARENTES
+   (mismo cristal translúcido que la web)
+   ============================================================ */
+.welcome-hint {
+    display: inline-block;
+    max-width: 330px;
+    font-size: 0.72rem;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.78);
+    padding: 0.55rem 1rem;
+    margin: 1rem auto 0;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 18px;
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.toast {
+    background: rgba(20, 15, 30, 0.42);
+    backdrop-filter: blur(26px) saturate(1.6);
+    -webkit-backdrop-filter: blur(26px) saturate(1.6);
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.modal-backdrop {
+    background: rgba(8, 8, 16, 0.45);
+    backdrop-filter: blur(12px) saturate(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+}
+
+.modal-content {
+    background: rgba(20, 15, 30, 0.4);
+    backdrop-filter: blur(30px) saturate(1.7);
+    -webkit-backdrop-filter: blur(30px) saturate(1.7);
+    border: 1px solid rgba(255, 255, 255, 0.26);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.confirm-overlay {
+    background: rgba(8, 8, 16, 0.48);
+    backdrop-filter: blur(12px) saturate(1.2);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+}
+
+.confirm-card {
+    background: rgba(20, 15, 30, 0.4);
+    backdrop-filter: blur(30px) saturate(1.7);
+    -webkit-backdrop-filter: blur(30px) saturate(1.7);
+    border: 1px solid rgba(255, 255, 255, 0.26);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.photo-lightbox {
+    background: rgba(6, 6, 12, 0.84);
+    backdrop-filter: blur(16px) saturate(1.2);
+    -webkit-backdrop-filter: blur(16px) saturate(1.2);
+}
+
+/* ============================================================
+   TANDA 3 — CLASIFICACIÓN: MÁS GLASSMORPHISM
+   ============================================================ */
+.leaderboard-overlay {
+    background: rgba(8, 8, 16, 0.45);
+    backdrop-filter: blur(12px) saturate(1.3);
+    -webkit-backdrop-filter: blur(12px) saturate(1.3);
+}
+
+.leaderboard-panel {
+    background:
+        linear-gradient(160deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.02) 45%, rgba(127, 184, 158, 0.06) 100%),
+        rgba(20, 15, 30, 0.36);
+    backdrop-filter: blur(34px) saturate(1.8);
+    -webkit-backdrop-filter: blur(34px) saturate(1.8);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow:
+        0 30px 70px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28),
+        inset 0 0 60px rgba(255, 255, 255, 0.04);
+}
+
+.lb-row {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+/* ============================================================
+   TANDA 3 — RESPONSIVE: QUE SE VEÁ TODO Y CENTRADO EN MÓVIL
+   ============================================================ */
+.screen {
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Bienvenida: centrada sin recortes + scroll de seguridad */
+.welcome-content {
+    min-height: 100%;
+    height: 100%;
+    padding: calc(1.4rem + var(--safe-top)) 1.2rem calc(1.4rem + var(--safe-bottom));
+}
+
+.welcome-card {
+    margin: auto;
+}
+
+/* Carrusel a la altura real del contenedor (sin 100vh del móvil) */
+.carousel-wrapper {
+    height: 100%;
+}
+
+/* Pantalla final: scroll a nivel de pantalla, sin doble scroll */
+.complete-content {
+    min-height: 100%;
+    overflow: visible;
+    padding: calc(1.8rem + var(--safe-top)) 1.2rem calc(2rem + var(--safe-bottom));
+}
+
+.party-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-top: 1rem;
+    max-width: 380px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* Táctil: botones grandes y sin resplandor de ratón */
+@media (pointer: coarse) {
+    #mouse-glow { display: none; }
+    .pager-btn { width: 44px; height: 44px; }
+    .dl-view { width: 32px; height: 32px; }
+}
+
+@media (min-width: 540px) {
+    .dl-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* Móviles */
+@media (max-width: 480px) {
+    .carousel-header { padding: 0 1rem; align-items: center; }
+    .carousel-user { gap: 0.45rem; margin-bottom: 0; min-width: 0; }
+    .carousel-avatar { width: 32px; height: 32px; font-size: 0.75rem; }
+    .carousel-username {
+        font-size: 1rem;
+        max-width: 32vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .carousel-header-right { gap: 0.5rem; }
+    .carousel-progress { gap: 0.45rem; }
+    .btn-trophy, .btn-logout { width: 32px; height: 32px; }
+    .carousel-track { padding: 1rem; gap: 0.75rem; }
+    .carousel-card { padding: 1.5rem 1.1rem; }
+    .welcome-card { padding: 2.2rem 1.4rem 1.8rem; }
+    .welcome-rings { width: min(42%, 130px); margin-bottom: 0.7rem; }
+    .detail-body { padding: 1rem 1rem calc(1.25rem + var(--safe-bottom)); gap: 0.85rem; }
+    .detail-challenge-card { padding: 2rem 1.2rem 1.6rem; }
+    .complete-card { padding: 2.2rem 1.4rem 1.8rem; }
+    .complete-stats { gap: 1.1rem; }
+    .party-gallery { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+    .dl-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Móviles estrechos */
+@media (max-width: 360px) {
+    .welcome-title { font-size: 2rem; }
+    .carousel-username { max-width: 26vw; }
+    .carousel-card { flex-basis: 84%; }
+    .lb-row { grid-template-columns: 26px 1fr auto; padding: 8px 9px; }
+    .dl-grid { gap: 6px; }
+    .done-card { padding: 1.5rem 1.6rem; }
+}
+
+/* Pantallas bajas: todo cabe sin recortes */
+@media (max-height: 740px) {
+    .carousel-card { min-height: 300px; height: 80%; padding: 1.2rem 1.1rem; }
+    .carousel-card-emoji { font-size: 2.7rem; margin-bottom: 0.55rem; }
+    .carousel-card-title { font-size: 1.2rem; }
+    .carousel-card-desc { font-size: 0.74rem; }
+    .welcome-card { padding-top: 1.7rem; padding-bottom: 1.4rem; }
+    .welcome-rings { width: min(36%, 110px); margin-bottom: 0.55rem; }
+    .welcome-desc { margin-bottom: 1.2rem; }
+    .welcome-hint { margin-top: 0.7rem; }
+}
+
+@media (max-height: 560px) {
+    .carousel-card { min-height: 250px; }
+    .welcome-rings { width: min(26%, 84px); }
+}
