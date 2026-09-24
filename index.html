@@ -16,6 +16,8 @@
 </head>
 <body>
     <div id="app-bg"></div>
+    <!-- Luces ambientales: brillos lentos de fondo, siempre en movimiento -->
+    <div id="ambient-lights" aria-hidden="true"><i></i><i></i><i></i></div>
     <div id="mouse-glow"></div>
 
     <!-- ========== SCREEN 1: WELCOME ========== -->
@@ -134,6 +136,10 @@
             <section class="party-gallery-wrap" id="party-gallery-wrap" hidden>
                 <h2 class="party-gallery-title">📸 Galería de la fiesta</h2>
                 <p class="party-gallery-sub">Todas las fotos subidas por los invitados</p>
+                <div class="gallery-filter" id="party-filter" hidden>
+                    <label for="party-filter-select">Ver fotos de</label>
+                    <select id="party-filter-select" aria-label="Filtrar la galería por persona"></select>
+                </div>
                 <div class="party-gallery" id="party-gallery"></div>
                 <div class="party-pager" id="party-pager"></div>
                 <div class="party-actions">
@@ -172,6 +178,10 @@
                 <button class="lightbox-close dl-close" id="dl-close" aria-label="Cerrar">&times;</button>
             </div>
             <p class="dl-sub" id="dl-sub"></p>
+            <div class="gallery-filter dl-filter" id="dl-filter" hidden>
+                <label for="dl-filter-select">Ver fotos de</label>
+                <select id="dl-filter-select" aria-label="Filtrar las fotos por persona"></select>
+            </div>
             <div class="dl-grid" id="dl-grid"></div>
             <p class="dl-progress" id="dl-progress" hidden><span id="dl-progress-text">Preparando…</span></p>
             <div class="dl-actions">
@@ -191,10 +201,26 @@
         </div>
     </div>
 
+    <!-- Perfil de participante (se abre desde la clasificación) -->
+    <div class="profile-overlay" id="profile-modal">
+        <div class="profile-panel">
+            <button class="lightbox-close" id="profile-close" aria-label="Cerrar">&times;</button>
+            <div class="profile-head">
+                <span class="profile-avatar" id="profile-avatar"></span>
+                <div class="profile-id">
+                    <h3 class="profile-name" id="profile-name"></h3>
+                    <p class="profile-meta" id="profile-meta"></p>
+                </div>
+            </div>
+            <div class="profile-bar"><i id="profile-bar-fill"></i></div>
+            <p class="profile-photos-title" id="profile-photos-title">Fotos subidas</p>
+            <div class="profile-photos" id="profile-photos"></div>
+        </div>
+    </div>
+
     <!-- Confirmación de nombre (integrada en la app) -->
     <div class="confirm-overlay" id="name-confirm">
         <div class="confirm-card glass">
-            <div class="confirm-icon">🪪</div>
             <h3 class="confirm-title" id="name-confirm-title"></h3>
             <p class="confirm-text" id="name-confirm-text"></p>
             <div class="confirm-actions">

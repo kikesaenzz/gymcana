@@ -347,16 +347,37 @@
         $('#dl-close').addEventListener('click', closeDownloadModal);
         $('#dl-backdrop').addEventListener('click', closeDownloadModal);
         $('#dl-select-all').addEventListener('click', () => {
+            // La comparación es sobre las fotos VISIBLES (si hay un
+            // filtro por persona activo, solo cuenta esas)
             const items = dlItems();
-            if (items.length > 0 && dlSelected.size === items.length) dlSelected.clear();
-            else items.forEach(it => dlSelected.add(it.key));
+            const visibleSelected = items.filter(it => dlSelected.has(it.key)).length;
+            if (items.length > 0 && visibleSelected === items.length) {
+                items.forEach(it => dlSelected.delete(it.key));
+            } else {
+                items.forEach(it => dlSelected.add(it.key));
+            }
             renderDlGrid();
             updateDlActions();
         });
         $('#dl-go').addEventListener('click', downloadSelected);
 
+        // Filtro por persona dentro del selector de descarga
+        $('#dl-filter-select').addEventListener('change', (e) => {
+            dlFilter = e.target.value;
+            const items = dlItems();
+            // Al cambiar de persona se empieza con todo lo visible seleccionado
+            dlSelected = new Set(items.map(it => it.key));
+            renderDlGrid();
+            updateDlActions();
+        });
+
         // Galería de la fiesta, lightbox y clasificación
         $('#btn-refresh-gallery').addEventListener('click', loadPartyGallery);
+        $('#party-filter-select').addEventListener('change', (e) => {
+            partyFilter = e.target.value;
+            partyPage = 1;
+            renderPartyPage();
+        });
         $('#lightbox-close').addEventListener('click', closeLightbox);
         $('#photo-lightbox').addEventListener('click', (e) => {
             if (e.target.id === 'photo-lightbox') closeLightbox();
@@ -366,11 +387,21 @@
         $('#leaderboard-overlay').addEventListener('click', (e) => {
             if (e.target.id === 'leaderboard-overlay') closeLeaderboard();
         });
+
+        // Perfil de participante (se abre tocando una fila de la clasificación)
+        $('#profile-close').addEventListener('click', closeProfile);
+        $('#profile-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'profile-modal') closeProfile();
+        });
+
         document.addEventListener('keydown', (e) => {
             if (e.key !== 'Escape') return;
             // Si el lightbox está encima, solo se cierra ese
             const lb = $('#photo-lightbox');
             if (lb && lb.classList.contains('active')) { closeLightbox(); return; }
+            // Después el perfil y luego el resto por capas
+            const prof = $('#profile-modal');
+            if (prof && prof.classList.contains('active')) { closeProfile(); return; }
             closeLeaderboard();
             closeDownloadModal();
         });
@@ -627,13 +658,13 @@
             showDoneOverlay(challenge);
 
             if (state.completedChallenges.length === CHALLENGES.length) {
-                setTimeout(() => showCompleteScreen(), 1700);
+                // Tiempos ampliados: el aviso se desvanece (0,6 s) y la
+                // siguiente pantalla entra en medio del fundido
+                setTimeout(() => showCompleteScreen(), 2100);
             } else {
                 const nextChallenge = CHALLENGES.find(c => !state.completedChallenges.includes(c.id));
                 if (nextChallenge) {
-                    // Transición suave: cambiamos el contenido en la misma
-                    // pantalla (con su animación) en vez de saltar al carrusel
-                    setTimeout(() => openChallenge(nextChallenge), 1500);
+                    setTimeout(() => openChallenge(nextChallenge), 1900);
                 }
             }
         } catch (error) {
@@ -652,10 +683,14 @@
         const ov = $('#done-overlay');
         if (!ov) { showToast('Reto completado', 2000, 'success'); return; }
         $('#done-title').textContent = '¡Reto completado!';
-        $('#done-sub').textContent = challenge ? `${challenge.emoji} ${challenge.title}` : '';
+        // Sin emojis: solo el nombre del reto
+        $('#done-sub').textContent = challenge ? challenge.title : '';
+        // Reinicia la animación por si se envían dos fotos seguidas
+        ov.classList.remove('active');
+        void ov.offsetWidth;
         ov.classList.add('active');
         clearTimeout(doneTimer);
-        doneTimer = setTimeout(() => ov.classList.remove('active'), 1400);
+        doneTimer = setTimeout(() => ov.classList.remove('active'), 1650);
     }
 
     // ── COMPLETE SCREEN ──────────────────────────────────────
@@ -714,14 +749,16 @@
     // ── MODAL DE SELECCIÓN Y DESCARGA ───────────────────────
     // Muestra las fotos para verlas y elegir cuáles descargar:
     // las propias ("mine") o las de toda la fiesta ("party").
-    // Siempre se pueden seleccionar todas de una vez.
+    // Siempre se pueden seleccionar todas de una vez. En la fiesta
+    // hay filtro por persona para ver solo las fotos de alguien.
     let dlSource = 'mine';
     let dlSelected = new Set();
+    let dlFilter = '';      // clave normalizada del filtro (vacío = todas)
     let dlBusy = false;
 
     function dlItems() {
         if (dlSource === 'party') {
-            return partyPhotos.map((p, i) => {
+            const all = partyPhotos.map((p, i) => {
                 const who = p.user || 'Invitado';
                 const slug = normalizeName(who).replace(/[^\w\s-]/g, '').replace(/\s+/g, '-') || 'invitado';
                 return {
@@ -731,9 +768,11 @@
                     title: who,
                     user: who,
                     reto: p.reto,
+                    slugKey: normalizeName(who) || 'invitado',
                     base: `Fiesta_${slug}_Reto_${p.reto != null ? p.reto : 'x'}`
                 };
             });
+            return dlFilter ? all.filter(it => it.slugKey === dlFilter) : all;
         }
         return CHALLENGES.filter(c => state.photos[c.id]).map(c => ({
             key: 'c' + c.id,
@@ -749,6 +788,7 @@
     function openDownloadModal(source) {
         dlSource = source;
         dlSelected = new Set();
+        dlFilter = '';
         const items = dlItems();
         if (items.length === 0) {
             showToast(source === 'party' ? 'Todavía no hay fotos en la galería' : 'Todavía no has subido fotos');
@@ -758,6 +798,12 @@
         items.forEach(it => dlSelected.add(it.key));
         $('#dl-title').textContent = source === 'party' ? 'Fotos de la fiesta' : 'Mis fotos';
         $('#dl-sub').textContent = 'Toca las fotos para elegir · 👁 para verlas en grande';
+        // Filtro por persona: solo en la fiesta y con 2+ personas
+        const filterWrap = $('#dl-filter');
+        if (filterWrap) {
+            if (source === 'party') populateFilterSelect($('#dl-filter-select'), partyPhotos);
+            else filterWrap.hidden = true;
+        }
         $('#dl-progress').hidden = true;
         renderDlGrid();
         updateDlActions();
@@ -802,7 +848,8 @@
         const all = $('#dl-select-all');
         if (!go || !all) return;
         const items = dlItems();
-        const n = dlSelected.size;
+        // Solo cuentan las fotos visibles (respetando el filtro activo)
+        const n = items.filter(it => dlSelected.has(it.key)).length;
         const icon = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
         go.innerHTML = n === 0 ? 'Elige alguna foto' : `${icon} Descargar (${n})`;
         go.disabled = n === 0 || dlBusy;
@@ -916,7 +963,34 @@
     // ── GALERÍA DE LA FIESTA ─────────────────────────────────
     let partyPhotos = [];
     let partyPage = 1;
+    let partyFilter = '';   // clave normalizada del filtro (vacío = todas)
     const PARTY_PAGE_SIZE = 12;
+
+    // Opciones del desplegable «Ver fotos de…»: personas ordenadas
+    // por número de fotos (la que más sube, primero)
+    function userOptions(photos) {
+        const map = new Map();
+        (photos || []).forEach(p => {
+            const raw = String((p && p.user) || '').trim();
+            const key = normalizeName(raw) || 'invitado';
+            const entry = map.get(key) || { key, label: raw || 'Invitado', count: 0 };
+            entry.count++;
+            if (raw) entry.label = raw;   // se queda el nombre original
+            map.set(key, entry);
+        });
+        return [...map.values()].sort((a, b) => b.count - a.count);
+    }
+
+    function populateFilterSelect(sel, photos) {
+        if (!sel) return;
+        const opts = userOptions(photos);
+        sel.innerHTML = '<option value="">Todas las personas</option>' +
+            opts.map(o => `<option value="${escapeHtml(o.key)}">${escapeHtml(o.label)} (${o.count})</option>`).join('');
+        sel.value = '';
+        // Solo se muestra si hay varias personas que filtrar
+        const wrap = sel.closest('.gallery-filter');
+        if (wrap) wrap.hidden = opts.length < 2;
+    }
 
     async function loadPartyGallery() {
         const wrap = $('#party-gallery-wrap');
@@ -934,6 +1008,8 @@
             photos.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
             partyPhotos = photos;
             partyPage = 1;
+            partyFilter = '';
+            populateFilterSelect($('#party-filter-select'), partyPhotos);
 
             if (partyPhotos.length === 0) {
                 grid.innerHTML = '<p class="party-empty">Todavía no hay fotos en la galería.</p>';
@@ -950,17 +1026,30 @@
         const pager = $('#party-pager');
         if (!grid) return;
 
-        const pages = Math.max(1, Math.ceil(partyPhotos.length / PARTY_PAGE_SIZE));
+        // Fotos visibles: con el filtro por persona si hay uno activo
+        const list = partyFilter
+            ? partyPhotos.filter(p => (normalizeName(p.user) || 'invitado') === partyFilter)
+            : partyPhotos;
+
+        const pages = Math.max(1, Math.ceil(list.length / PARTY_PAGE_SIZE));
         if (partyPage > pages) partyPage = pages;
         if (partyPage < 1) partyPage = 1;
 
-        const start = (partyPage - 1) * PARTY_PAGE_SIZE;
-        const slice = partyPhotos.slice(start, start + PARTY_PAGE_SIZE);
+        if (list.length === 0) {
+            grid.innerHTML = '<p class="party-empty">No hay fotos de esa persona.</p>';
+            if (pager) pager.innerHTML = '';
+            return;
+        }
 
-        grid.innerHTML = slice.map((p, i) => {
+        const start = (partyPage - 1) * PARTY_PAGE_SIZE;
+        const slice = list.slice(start, start + PARTY_PAGE_SIZE);
+
+        grid.innerHTML = slice.map(p => {
             const who = p.user ? `👤 ${escapeHtml(p.user)}` : '👤 Invitado';
+            // Índice dentro de partyPhotos para el lightbox
+            const i = partyPhotos.indexOf(p);
             return `
-                <figure class="party-photo" data-i="${start + i}">
+                <figure class="party-photo" data-i="${i}">
                     <img src="${escapeHtml(p.thumb || p.url)}" alt="${who}" loading="lazy">
                     <figcaption class="party-badge">${who}</figcaption>
                 </figure>
@@ -1035,25 +1124,42 @@
         return arr;
     }
 
+    // La clasificación se pagina (en el overlay y en la pantalla
+    // final) y cada fila es pulsable: abre el perfil con las fotos
+    // que ha subido esa persona.
+    let lbList = null;
+    let lbPage = 1;
+    const LB_PAGE_SIZE = 8;
+
     async function loadLeaderboard() {
         renderLeaderboard(null, true);
         try {
             const [uRes, gRes] = await Promise.all([fetch('/api/users'), fetch('/api/gallery')]);
             const users = uRes.ok ? await uRes.json() : [];
             const photos = gRes.ok ? await gRes.json() : [];
-            renderLeaderboard(buildRanking(
+            lbList = buildRanking(
                 Array.isArray(users) ? users : [],
                 Array.isArray(photos) ? photos : []
-            ));
+            );
+            // La primera página es la que contiene tu puesto
+            lbPage = 1;
+            if (state.username) {
+                const mine = normalizeName(state.username);
+                const idx = lbList.findIndex(e => normalizeName(e.name) === mine);
+                if (idx >= 0) lbPage = Math.floor(idx / LB_PAGE_SIZE) + 1;
+            }
+            renderLeaderboard();
         } catch (e) {
             renderLeaderboard(null, false, true);
         }
     }
 
-    function renderLeaderboard(list, loading, error) {
+    function renderLeaderboard(loading, error) {
+        const list = lbList;
         const mine = state.username ? normalizeName(state.username) : '';
         let html = '';
         let subtitle = 'Quién va primero en la gymkana';
+        let pagerHtml = '';
 
         if (loading) {
             html = '<p class="lb-loading">Cargando clasificación…</p>';
@@ -1062,15 +1168,22 @@
         } else if (!list || list.length === 0) {
             html = '<p class="lb-empty">Todavía no hay participantes.</p>';
         } else {
+            const pages = Math.max(1, Math.ceil(list.length / LB_PAGE_SIZE));
+            if (lbPage > pages) lbPage = pages;
+            if (lbPage < 1) lbPage = 1;
+            const start = (lbPage - 1) * LB_PAGE_SIZE;
+
             let myRank = 0;
-            html = list.map((e, i) => {
+            list.forEach((e, i) => { if (mine && normalizeName(e.name) === mine) myRank = i + 1; });
+
+            html = list.slice(start, start + LB_PAGE_SIZE).map((e, k) => {
+                const i = start + k;
                 const isMe = mine && normalizeName(e.name) === mine;
-                if (isMe) myRank = i + 1;
                 const pos = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1);
                 const pct = Math.round((e.progress / CHALLENGES.length) * 100);
                 const done = e.progress >= CHALLENGES.length;
                 return `
-                    <div class="lb-row ${isMe ? 'me' : ''}">
+                    <div class="lb-row ${isMe ? 'me' : ''}" data-name="${escapeHtml(e.name)}" role="button" tabindex="0" title="Ver el perfil de ${escapeHtml(e.name)}">
                         <span class="lb-pos">${pos}</span>
                         <span class="lb-name">${escapeHtml(e.name)}${isMe ? '<span class="lb-you">TÚ</span>' : ''}</span>
                         <span class="lb-prog">${e.progress}/${CHALLENGES.length}${done ? ' · 🏁' : ''}</span>
@@ -1078,6 +1191,15 @@
                     </div>
                 `;
             }).join('');
+
+            if (pages > 1) {
+                pagerHtml = `
+                    <button class="pager-btn" data-dir="prev" aria-label="Página anterior" ${lbPage === 1 ? 'disabled' : ''}>&lsaquo;</button>
+                    <span class="pager-info">${lbPage} / ${pages}</span>
+                    <button class="pager-btn" data-dir="next" aria-label="Página siguiente" ${lbPage === pages ? 'disabled' : ''}>&rsaquo;</button>
+                `;
+            }
+
             subtitle = (mine && myRank)
                 ? `Tu puesto: ${myRank}º de ${list.length} · ${list.length} participantes`
                 : (mine
@@ -1087,7 +1209,24 @@
 
         ['lb-list-overlay', 'lb-list-complete'].forEach(id => {
             const el = document.getElementById(id);
-            if (el) el.innerHTML = html;
+            if (!el) return;
+            el.innerHTML = html + (pagerHtml ? `<div class="party-pager lb-pager">${pagerHtml}</div>` : '');
+
+            // Paginación de la clasificación
+            el.querySelectorAll('.lb-pager .pager-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    lbPage += btn.dataset.dir === 'next' ? 1 : -1;
+                    renderLeaderboard();
+                });
+            });
+            // Tocar una fila abre el perfil de esa persona
+            el.querySelectorAll('.lb-row[data-name]').forEach(row => {
+                const open = () => openProfile(row.dataset.name);
+                row.addEventListener('click', open);
+                row.addEventListener('keydown', (ev) => {
+                    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); }
+                });
+            });
         });
         ['lb-sub-overlay', 'lb-sub-complete'].forEach(id => {
             const el = document.getElementById(id);
@@ -1105,6 +1244,71 @@
     function closeLeaderboard() {
         const ov = $('#leaderboard-overlay');
         if (ov) ov.classList.remove('active');
+    }
+
+    // ── PERFIL DE PARTICIPANTE ───────────────────────────────
+    // Se abre tocando una fila de la clasificación: muestra sus
+    // datos y todas las fotos que ha subido (toca una → grande)
+    async function openProfile(name) {
+        const modal = $('#profile-modal');
+        if (!modal) return;
+        const key = normalizeName(name);
+        const photosBox = $('#profile-photos');
+
+        $('#profile-name').textContent = name;
+        $('#profile-avatar').textContent = (String(name).trim().charAt(0) || '?').toUpperCase();
+        $('#profile-meta').textContent = 'Cargando…';
+        $('#profile-bar-fill').style.width = '0%';
+        $('#profile-photos-title').textContent = `Fotos de ${name}`;
+        photosBox.innerHTML = '<p class="lb-loading">Cargando fotos…</p>';
+        modal.classList.add('active');
+
+        try {
+            // Reutiliza la galería ya cargada; si no, la trae ahora
+            let photos = partyPhotos;
+            if (!photos || photos.length === 0) {
+                const res = await fetch('/api/gallery');
+                const data = res.ok ? await res.json() : [];
+                photos = Array.isArray(data) ? data : [];
+                partyPhotos = photos;
+            }
+            const mine = photos.filter(p => (normalizeName(p.user) || 'invitado') === key);
+
+            const entry = lbList ? lbList.find(e => normalizeName(e.name) === key) : null;
+            const progress = entry ? entry.progress : null;
+            $('#profile-meta').textContent = (progress != null
+                ? `${mine.length} ${mine.length === 1 ? 'foto subida' : 'fotos subidas'} · ${progress}/${CHALLENGES.length} retos`
+                : `${mine.length} ${mine.length === 1 ? 'foto subida' : 'fotos subidas'}`);
+            $('#profile-bar-fill').style.width =
+                (progress != null ? Math.round((progress / CHALLENGES.length) * 100) : 0) + '%';
+
+            if (mine.length === 0) {
+                photosBox.innerHTML = '<p class="lb-empty">Todavía no ha subido fotos.</p>';
+                return;
+            }
+            photosBox.innerHTML = mine.map(p => {
+                const i = partyPhotos.indexOf(p);
+                const ch = p.reto != null ? CHALLENGES.find(c => c.id === p.reto) : null;
+                return `
+                    <figure class="party-photo" data-i="${i}">
+                        <img src="${escapeHtml(p.thumb || p.url)}" alt="${escapeHtml(ch ? ch.title : 'Foto')}" loading="lazy">
+                        <figcaption class="party-badge">${ch ? escapeHtml(ch.title) : 'Foto'}</figcaption>
+                    </figure>
+                `;
+            }).join('');
+            photosBox.querySelectorAll('.party-photo').forEach(fig => {
+                fig.addEventListener('click', () => {
+                    openLightbox(partyPhotos[parseInt(fig.dataset.i, 10)]);
+                });
+            });
+        } catch (e) {
+            photosBox.innerHTML = '<p class="lb-empty">No se pudieron cargar las fotos.</p>';
+        }
+    }
+
+    function closeProfile() {
+        const m = $('#profile-modal');
+        if (m) m.classList.remove('active');
     }
 
     // ── CONFETTI ─────────────────────────────────────────────
