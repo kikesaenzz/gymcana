@@ -1,0 +1,14 @@
+# Dependencias
+node_modules/
+
+# Vercel (sesión local del CLI)
+.vercel/
+
+# Variables de entorno locales
+.env
+.env.*
+.env.local
+
+# Sistema
+.DS_Store
+Thumbs.db
