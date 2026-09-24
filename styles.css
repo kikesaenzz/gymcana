@@ -1123,3 +1123,145 @@ iframe[src*="vercel.com"] {
     position: absolute !important;
     pointer-events: none !important;
 }
+
+/* ============================================================
+   WELCOME — FOTO DE LOS ANILLOS
+   ============================================================ */
+.welcome-rings {
+    display: block;
+    width: min(46%, 150px);
+    margin: 0 auto 0.9rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+    object-fit: cover;
+}
+
+/* ============================================================
+   GALERÍA DE LA FIESTA
+   ============================================================ */
+.party-gallery-wrap {
+    width: 100%;
+    margin-top: 1.6rem;
+}
+
+.party-gallery-title {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    text-align: center;
+    color: var(--white);
+    margin-bottom: 0.2rem;
+}
+
+.party-gallery-sub {
+    text-align: center;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 1rem;
+}
+
+.party-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+}
+
+.party-photo {
+    position: relative;
+    margin: 0;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    aspect-ratio: 1;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    cursor: pointer;
+}
+
+.party-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.25s ease;
+}
+
+.party-photo:hover img {
+    transform: scale(1.06);
+}
+
+.party-badge {
+    position: absolute;
+    left: 4px;
+    right: 4px;
+    bottom: 4px;
+    background: rgba(0, 0, 0, 0.62);
+    backdrop-filter: blur(4px);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.58rem;
+    padding: 0.25rem 0.4rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+}
+
+.party-empty,
+.party-loading {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
+    padding: 1.2rem 0;
+}
+
+/* ============================================================
+   LIGHTBOX
+   ============================================================ */
+.photo-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1.2rem;
+    background: rgba(0, 0, 0, 0.9);
+}
+
+.photo-lightbox.active {
+    display: flex;
+}
+
+.photo-lightbox img {
+    max-width: 100%;
+    max-height: 78vh;
+    border-radius: var(--radius-sm);
+    object-fit: contain;
+}
+
+.lightbox-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--white);
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.lightbox-caption {
+    position: absolute;
+    bottom: 1.4rem;
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.85rem;
+    padding: 0 1.2rem;
+}

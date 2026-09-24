@@ -39,7 +39,33 @@
         complete: $('#screen-complete')
     };
 
-    // ── INIT ─────────────────────────────────────────────────
+    // Normaliza el nombre: minúsculas y sin acentos. Se usa para
+    // carpetas, etiquetas, sincronización y localStorage, de modo
+    // que "Ana", "ana" y "ANA" sean el mismo invitado. En pantalla
+    // siempre se muestra el nombre original.
+    function normalizeName(name) {
+        return String(name || '')
+            .trim()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, ' ');
+    }
+
+    function storageKey() {
+        return STORAGE_PREFIX + normalizeName(state.username);
+    }
+
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // ── INIT ─────────────────────────────────────────────
     function init() {
         bindEvents();
     }
@@ -48,7 +74,17 @@
     function loadState() {
         try {
             if (state.username) {
-                const saved = localStorage.getItem(STORAGE_PREFIX + state.username);
+                const key = storageKey();
+                let saved = localStorage.getItem(key);
+                if (!saved) {
+                    // Migración: antes se guardaba con el nombre tal cual
+                    const legacyKey = STORAGE_PREFIX + state.username;
+                    saved = localStorage.getItem(legacyKey);
+                    if (saved) {
+                        localStorage.setItem(key, saved);
+                        localStorage.removeItem(legacyKey);
+                    }
+                }
                 if (saved) state = { ...state, ...JSON.parse(saved) };
             }
         } catch (e) {}
@@ -57,7 +93,7 @@
     function saveState() {
         try {
             if (state.username) {
-                localStorage.setItem(STORAGE_PREFIX + state.username, JSON.stringify({
+                localStorage.setItem(storageKey(), JSON.stringify({
                     username: state.username,
                     completedChallenges: state.completedChallenges,
                     photos: state.photos
@@ -69,19 +105,28 @@
     async function syncFromCloud() {
         if (!state.username) return;
         try {
-            const res = await fetch(`/api/sync?username=${encodeURIComponent(state.username)}`);
-            if (!res.ok) return;
-            const data = await res.json();
-            if (!data.resources || data.resources.length === 0) return;
+            // Se busca con el nombre normalizado y, por si acaso, con el
+            // nombre original (fotos subidas antes de normalizar).
+            const keys = [...new Set([normalizeName(state.username), state.username])].filter(Boolean);
+            const responses = await Promise.all(keys.map(k =>
+                fetch(`/api/sync?username=${encodeURIComponent(k)}`)
+                    .then(r => (r.ok ? r.json() : { resources: [] }))
+                    .catch(() => ({ resources: [] }))
+            ));
+            const resources = responses.flatMap(r => r.resources || []);
+            if (resources.length === 0) return;
 
-            data.resources.forEach(r => {
+            const seen = new Set();
+            resources.forEach(r => {
+                if (!r.public_id || seen.has(r.public_id)) return;
+                seen.add(r.public_id);
                 const tags = r.tags || [];
                 let challengeId = null;
 
                 for (const tag of tags) {
                     const match = tag.match(/^reto_(\d+)$/);
                     if (match) {
-                        challengeId = parseInt(match[1]);
+                        challengeId = parseInt(match[1], 10);
                         break;
                     }
                 }
@@ -97,6 +142,15 @@
         } catch (e) {
             console.warn('Sync from cloud failed:', e);
         }
+    }
+
+    // ── REGISTRO DE INVITADOS ────────────────────────────────
+    function registerUser(name) {
+        fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name })
+        }).catch(() => {});
     }
 
     // ── NAVIGATION ───────────────────────────────────────────
@@ -125,8 +179,14 @@
             state.username = name;
             loadState();
             state.username = name;
+            registerUser(name);
             await syncFromCloud();
             saveState();
+            // Si ya tiene todos los retos hechos, directamente a la pantalla final
+            if (state.completedChallenges.length >= CHALLENGES.length) {
+                showCompleteScreen();
+                return;
+            }
             renderCarousel();
             navigateTo('challenges');
         });
@@ -212,6 +272,26 @@
         $('#btn-select-download').addEventListener('click', () => {
             toggleSelectMode();
         });
+
+        // Galería de la fiesta y lightbox
+        $('#btn-refresh-gallery').addEventListener('click', loadPartyGallery);
+        $('#lightbox-close').addEventListener('click', closeLightbox);
+        $('#photo-lightbox').addEventListener('click', (e) => {
+            if (e.target.id === 'photo-lightbox') closeLightbox();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeLightbox();
+        });
+
+        // Carrusel: scroll y rueda, registrados UNA sola vez
+        // (antes se añadían en cada render y los puntos no se movían
+        // porque el cálculo usaba el contenedor equivocado)
+        const track = $('#carousel-track');
+        track.addEventListener('scroll', updateDots, { passive: true });
+        track.addEventListener('wheel', function (e) {
+            e.preventDefault();
+            track.scrollLeft += e.deltaY * 2;
+        }, { passive: false });
     }
 
     // ── RENDER CAROUSEL ──────────────────────────────────────
@@ -260,47 +340,18 @@
             `<div class="carousel-dot ${i === 0 ? 'active' : ''}" data-index="${i}"></div>`
         ).join('');
 
-        // Scroll to current card
+        // Scroll to current card (el scroller es el track, no el wrapper)
         const currentCard = track.querySelector('.carousel-card.current');
         if (currentCard) {
             setTimeout(() => {
-                const wrapper = track.parentElement;
-                const wrapperCenter = wrapper.offsetWidth / 2;
                 const cardCenter = currentCard.offsetLeft + currentCard.offsetWidth / 2;
-                wrapper.scrollTo({
-                    left: cardCenter - wrapperCenter,
+                track.scrollTo({
+                    left: cardCenter - track.offsetWidth / 2,
                     behavior: 'smooth'
                 });
+                setTimeout(updateDots, 350);
             }, 100);
         }
-
-        // Scroll listener for dots
-        track.addEventListener('scroll', function onScroll() {
-            const wrapper = track.parentElement;
-            const wrapperCenter = wrapper.offsetWidth / 2;
-            const cards = track.querySelectorAll('.carousel-card');
-            const dots = dotsContainer.querySelectorAll('.carousel-dot');
-
-            let closestIdx = 0;
-            let closestDist = Infinity;
-
-            cards.forEach(function(card, i) {
-                const cardCenter = card.offsetLeft + card.offsetWidth / 2;
-                const dist = Math.abs(cardCenter - wrapper.scrollLeft - wrapperCenter);
-                if (dist < closestDist) {
-                    closestDist = dist;
-                    closestIdx = i;
-                }
-            });
-
-            dots.forEach(function(d, i) { d.classList.toggle('active', i === closestIdx); });
-        });
-
-        // Mouse wheel scrolls carousel horizontally
-        track.addEventListener('wheel', function(e) {
-            e.preventDefault();
-            track.scrollLeft += e.deltaY * 2;
-        }, { passive: false });
 
         // Click on card centers it, then opens if current
         track.querySelectorAll('.carousel-card').forEach(function(card) {
@@ -312,9 +363,8 @@
 
                 // Always center the card on click
                 var cardCenter = card.offsetLeft + card.offsetWidth / 2;
-                var wrapperCenter = track.offsetWidth / 2;
                 track.scrollTo({
-                    left: cardCenter - wrapperCenter,
+                    left: cardCenter - track.offsetWidth / 2,
                     behavior: 'smooth'
                 });
 
@@ -329,6 +379,35 @@
                 openChallenge(challenge);
             });
         });
+
+        updateDots();
+    }
+
+    // Marca como activo el punto de la tarjeta más cercana al centro.
+    // Usa coordenadas visuales (getBoundingClientRect), así funciona
+    // mientras el usuario desliza con el dedo, la rueda o los clics.
+    function updateDots() {
+        const track = $('#carousel-track');
+        if (!track) return;
+        const cards = track.querySelectorAll('.carousel-card');
+        const dots = document.querySelectorAll('#carousel-dots .carousel-dot');
+        if (!cards.length || dots.length !== cards.length) return;
+
+        const trackRect = track.getBoundingClientRect();
+        const center = trackRect.left + trackRect.width / 2;
+        let closestIdx = 0;
+        let closestDist = Infinity;
+
+        cards.forEach((card, i) => {
+            const r = card.getBoundingClientRect();
+            const dist = Math.abs(r.left + r.width / 2 - center);
+            if (dist < closestDist) {
+                closestDist = dist;
+                closestIdx = i;
+            }
+        });
+
+        dots.forEach((d, i) => d.classList.toggle('active', i === closestIdx));
     }
 
     // ── OPEN CHALLENGE DETAIL ────────────────────────────────
@@ -397,12 +476,12 @@
     // ── UPLOAD TO CLOUDINARY ─────────────────────────────────
     async function uploadToCloudinary(file, challengeId) {
         const { cloudName, uploadPreset } = CLOUDINARY_CONFIG;
-        const folderPath = `gymkana-boda/${state.username}`;
+        const folderPath = `gymkana-boda/${normalizeName(state.username)}`;
         const formData = new FormData();
         formData.append('file', file);
         formData.append('upload_preset', uploadPreset);
         formData.append('folder', folderPath);
-        formData.append('tags', `gymkana,boda,${state.username},reto_${challengeId}`);
+        formData.append('tags', `gymkana,boda,${normalizeName(state.username)},reto_${challengeId}`);
         formData.append('context', `user=${state.username}|challenge=${challengeId}`);
 
         const response = await fetch(
@@ -501,6 +580,7 @@
         `;
 
         renderCompleteGallery();
+        loadPartyGallery();
         createConfetti();
         navigateTo('complete');
     }
@@ -564,6 +644,64 @@
             document.body.removeChild(link);
             await new Promise(r => setTimeout(r, 300));
         }
+    }
+
+    // ── GALERÍA DE LA FIESTA ─────────────────────────────────
+    let partyPhotos = [];
+
+    async function loadPartyGallery() {
+        const wrap = $('#party-gallery-wrap');
+        const grid = $('#party-gallery');
+        if (!wrap || !grid) return;
+        wrap.hidden = false;
+        grid.innerHTML = '<p class="party-loading">Cargando fotos…</p>';
+        try {
+            const res = await fetch('/api/gallery');
+            if (!res.ok) throw new Error('Error cargando la galería');
+            const photos = await res.json();
+            if (!Array.isArray(photos)) throw new Error('Respuesta no válida');
+            photos.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+            partyPhotos = photos;
+
+            if (partyPhotos.length === 0) {
+                grid.innerHTML = '<p class="party-empty">Todavía no hay fotos en la galería.</p>';
+                return;
+            }
+
+            grid.innerHTML = partyPhotos.map((p, i) => {
+                const who = p.user ? `👤 ${escapeHtml(p.user)}` : '👤 Invitado';
+                return `
+                    <figure class="party-photo" data-i="${i}">
+                        <img src="${escapeHtml(p.thumb || p.url)}" alt="${who}" loading="lazy">
+                        <figcaption class="party-badge">${who}</figcaption>
+                    </figure>
+                `;
+            }).join('');
+
+            grid.querySelectorAll('.party-photo').forEach(fig => {
+                fig.addEventListener('click', () => {
+                    openLightbox(partyPhotos[parseInt(fig.dataset.i, 10)]);
+                });
+            });
+        } catch (e) {
+            grid.innerHTML = '<p class="party-empty">No se pudo cargar la galería. Pulsa «Actualizar».</p>';
+        }
+    }
+
+    function openLightbox(photo) {
+        if (!photo) return;
+        const challenge = CHALLENGES.find(c => c.id === photo.reto);
+        const parts = [];
+        if (photo.user) parts.push(`Subida por ${photo.user}`);
+        if (challenge) parts.push(`Reto: ${challenge.title}`);
+        $('#lightbox-img').src = photo.url;
+        $('#lightbox-caption').textContent = parts.join(' · ');
+        $('#photo-lightbox').classList.add('active');
+    }
+
+    function closeLightbox() {
+        const box = $('#photo-lightbox');
+        if (box) box.classList.remove('active');
     }
 
     // ── CONFETTI ─────────────────────────────────────────────

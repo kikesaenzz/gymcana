@@ -11,6 +11,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/png" href="anillos.png">
+    <link rel="apple-touch-icon" href="anillos.png">
 </head>
 <body>
     <div id="app-bg"></div>
@@ -20,7 +22,7 @@
     <div id="screen-welcome" class="screen active">
         <div class="welcome-content">
             <div class="welcome-card glass">
-                <div class="welcome-ornament">&#10053;</div>
+                <img class="welcome-rings" src="anillos.png" alt="Anillos de boda">
                 <h1 class="welcome-title">Gymkana<br>Fotográfica</h1>
                 <p class="welcome-subtitle">¡Captura los mejores momentos!</p>
                 <p class="welcome-desc">Completa retos fotográficos, sube tus fotos y demuestra que eres el mejor fotógrafo de la fiesta.</p>
@@ -101,7 +103,7 @@
             <button class="btn-primary btn-submit" id="btn-submit" disabled>
                 <span class="btn-text">Enviar foto</span>
                 <span class="btn-loader" style="display:none;">
-                    <svg class="spinner" width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="30 70" stroke-linecap="round"/></svg>
+                    <svg class="spinner" width="18" height="18" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="30 70"/></svg>
                     Subiendo...
                 </span>
             </button>
@@ -126,15 +128,29 @@
                     Descargar todas
                 </button>
                 <button class="btn-secondary" id="btn-select-download" style="max-width:380px; width:100%;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                     Seleccionar fotos
                 </button>
                 <button class="btn-primary" id="btn-restart" style="max-width:380px; width:100%;">Volver a empezar</button>
             </div>
+
+            <section class="party-gallery-wrap" id="party-gallery-wrap" hidden>
+                <h2 class="party-gallery-title">📸 Galería de la fiesta</h2>
+                <p class="party-gallery-sub">Todas las fotos subidas por los invitados</p>
+                <div class="party-gallery" id="party-gallery"></div>
+                <button class="btn-secondary" id="btn-refresh-gallery" style="max-width:380px; width:100%; margin-top: 1rem;">Actualizar</button>
+            </section>
         </div>
     </div>
 
     <div id="toast" class="toast"></div>
+
+    <!-- Lightbox de la galería -->
+    <div class="photo-lightbox" id="photo-lightbox">
+        <button class="lightbox-close" id="lightbox-close" aria-label="Cerrar">&times;</button>
+        <img id="lightbox-img" src="" alt="">
+        <div class="lightbox-caption" id="lightbox-caption"></div>
+    </div>
 
     <script src="config.js"></script>
     <script src="app.js"></script>
