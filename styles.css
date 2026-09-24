@@ -2448,7 +2448,14 @@ body::before {
    TANDA 4 — MOVIMIENTO REDUCIDO
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
-    #ambient-lights i { animation: none; }
-    .done-overlay, .done-card { transition: none; }
+    /* Misma especificidad que las reglas base (nth-child/.active):
+       al ir este bloque después, es él el que gana */
+    #ambient-lights i:nth-child(1),
+    #ambient-lights i:nth-child(2),
+    #ambient-lights i:nth-child(3) { animation: none; }
+    .done-overlay,
+    .done-overlay.active,
+    .done-card { transition: none; }
     .done-overlay.active .done-card::before { animation: none; }
+    .profile-panel { animation: none; }
 }
