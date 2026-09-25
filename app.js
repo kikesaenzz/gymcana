@@ -208,7 +208,7 @@
         usernameInput.addEventListener('focus', () => {
             try {
                 if (!localStorage.getItem('gymkana_boda_hint_seen')) {
-                    showToast('Pon un nombre identificativo: con él se reconocerán tus fotos 😊', 4500);
+                    showToast('Pon un nombre identificativo: con él se reconocerán tus fotos', 4500);
                     localStorage.setItem('gymkana_boda_hint_seen', '1');
                 }
             } catch (e) {}
@@ -300,11 +300,42 @@
             if (e.key === 'Enter') btnStart.click();
         });
 
-        $('#btn-logout').addEventListener('click', () => {
+        function logout() {
             saveState();
             state.username = null;
+            closeProfile();
+            closeLeaderboard();
             navigateTo('welcome');
             showToast('Tu progreso se ha guardado');
+        }
+        $('#btn-logout').addEventListener('click', logout);
+        $('#detail-logout').addEventListener('click', logout);
+        $('#profile-logout').addEventListener('click', logout);
+
+        // Mi perfil desde el avatar de la cabecera o del detalle
+        function openMyProfile() {
+            if (state.username) openProfile(state.username);
+        }
+        const headerUser = $('#header-user');
+        headerUser.addEventListener('click', openMyProfile);
+        headerUser.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMyProfile(); }
+        });
+        $('#detail-profile').addEventListener('click', openMyProfile);
+        $('#detail-leaderboard').addEventListener('click', openLeaderboard);
+        // Volver a la pantalla de felicidades (solo al terminar todo)
+        $('#btn-summary').addEventListener('click', showCompleteScreen);
+        $('#profile-summary').addEventListener('click', () => {
+            closeProfile();
+            showCompleteScreen();
+        });
+        $('#profile-download').addEventListener('click', () => {
+            closeProfile();
+            openDownloadModal('mine');
+        });
+        $('#profile-lb').addEventListener('click', () => {
+            closeProfile();
+            openLeaderboard();
         });
 
         $('#btn-back').addEventListener('click', () => {
@@ -574,6 +605,9 @@
         $('#header-name').textContent = state.username;
         $('#progress-fill').style.width = `${(completed / total) * 100}%`;
         $('#progress-text').textContent = `${completed} / ${total}`;
+        // Al terminarlo todo se puede volver a la pantalla final
+        const summaryBtn = $('#btn-summary');
+        if (summaryBtn) summaryBtn.hidden = completed < total;
 
         // Cards
         track.innerHTML = CHALLENGES.map((challenge) => {
@@ -587,7 +621,7 @@
             } else if (isCurrent) {
                 statusHTML = '<span class="status-badge active">&#9654; Ahora</span>';
             } else {
-                statusHTML = '<span class="status-badge locked">&#128274;</span>';
+                statusHTML = '<span class="status-badge locked"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v3"/></svg></span>';
             }
 
             return `
@@ -696,8 +730,7 @@
             detail.classList.add('active');
         }
 
-        $('#detail-header-title').textContent = challenge.title;
-        $('#detail-number').textContent = `Reto ${challenge.id}`;
+        $('#detail-avatar-letter').textContent = (state.username || '?').charAt(0).toUpperCase();
         $('#detail-emoji').textContent = challenge.emoji;
         $('#detail-title').textContent = challenge.title;
         $('#detail-description').textContent = challenge.description;
@@ -885,23 +918,30 @@
 
     // Alterna cada sección de la pantalla final y carga su contenido
     // una sola vez (carga diferida)
+    // Solo una seccion a la vez: abrir "todas" cierra "mis fotos"
+    // y viceversa (ademas carga diferida de cada una).
+    const viewToggles = [];
+    function setToggle(t, open) {
+        t.sec.hidden = !open;
+        t.btn.classList.toggle('active', open);
+        t.btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
     function bindViewToggle(btnSel, secSel, loader) {
         const btn = $(btnSel);
         const sec = $(secSel);
         if (!btn || !sec) return;
+        const t = { btn, sec, loader };
+        viewToggles.push(t);
         btn.addEventListener('click', () => {
             const show = sec.hidden;
             if (show) {
                 if (!sec.dataset.loaded) {
                     sec.dataset.loaded = '1';
-                    loader();
+                    t.loader();
                 }
-                sec.hidden = false;
-            } else {
-                sec.hidden = true;
+                viewToggles.forEach(other => { if (other !== t) setToggle(other, false); });
             }
-            btn.classList.toggle('active', show);
-            btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+            setToggle(t, show);
         });
     }
 
@@ -983,7 +1023,7 @@
         // Empieza con todas seleccionadas (se pueden ir desmarcando)
         items.forEach(it => dlSelected.add(it.key));
         $('#dl-title').textContent = source === 'party' ? 'Fotos de la fiesta' : 'Mis fotos';
-        $('#dl-sub').textContent = 'Toca las fotos para elegir · 👁 para verlas en grande';
+        $('#dl-sub').textContent = 'Toca las fotos para elegir; el icono del ojo las abre en grande';
         // Filtro por persona: solo en la fiesta y con 2+ personas
         if (source === 'party') renderPersonDropdown('dl-dd', partyPhotos, dlFilter, onDlFilterPick);
         else $('#dl-filter').hidden = true;
@@ -1006,7 +1046,7 @@
             <figure class="dl-item ${dlSelected.has(it.key) ? 'selected' : ''}" data-key="${it.key}" style="animation-delay:${(k * 0.04).toFixed(3)}s">
                 <img src="${escapeHtml(thumbUrl(it.thumb))}" alt="${escapeHtml(it.title)}" ${IMG_ATTRS}>
                 <span class="dl-check" aria-hidden="true">&#10003;</span>
-                <button type="button" class="dl-view" title="Ver foto" aria-label="Ver foto">&#128065;</button>
+                <button type="button" class="dl-view" title="Ver foto" aria-label="Ver foto"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
             </figure>
         `).join('');
 
@@ -1303,7 +1343,7 @@
         const slice = list.slice(start, start + PARTY_PAGE_SIZE);
 
         grid.innerHTML = slice.map((p, k) => {
-            const who = p.user ? `👤 ${escapeHtml(p.user)}` : '👤 Invitado';
+            const who = p.user ? escapeHtml(p.user) : 'Invitado';
             // Índice dentro de partyPhotos para el lightbox
             const i = partyPhotos.indexOf(p);
             return `
@@ -1427,7 +1467,10 @@
     const LB_PAGE_SIZE = 8;
 
     async function loadLeaderboard() {
-        renderLeaderboard(null, true);
+        // Sin datos en memoria se muestra la carga una sola vez; con
+        // datos ya cargados se pinta al instante para no parpadear.
+        const cached = !!lbList;
+        renderLeaderboard(!cached, false, false);
         try {
             const [uRes, gRes] = await Promise.all([fetch('/api/users'), fetch('/api/gallery')]);
             const users = uRes.ok ? await uRes.json() : [];
@@ -1436,20 +1479,20 @@
                 Array.isArray(users) ? users : [],
                 Array.isArray(photos) ? photos : []
             );
-            // La primera página es la que contiene tu puesto
+            // La primera p?gina es la que contiene tu puesto
             lbPage = 1;
             if (state.username) {
                 const mine = normalizeName(state.username);
                 const idx = lbList.findIndex(e => normalizeName(e.name) === mine);
                 if (idx >= 0) lbPage = Math.floor(idx / LB_PAGE_SIZE) + 1;
             }
-            renderLeaderboard();
+            renderLeaderboard(false, false, !cached);
         } catch (e) {
-            renderLeaderboard(null, false, true);
+            renderLeaderboard(false, true, false);
         }
     }
 
-    function renderLeaderboard(loading, error) {
+    function renderLeaderboard(loading, error, animate) {
         const list = lbList;
         const mine = state.username ? normalizeName(state.username) : '';
         let html = '';
@@ -1474,14 +1517,14 @@
             html = list.slice(start, start + LB_PAGE_SIZE).map((e, k) => {
                 const i = start + k;
                 const isMe = mine && normalizeName(e.name) === mine;
-                const pos = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : String(i + 1);
+                const posCls = i < 3 ? ' pos-' + (i + 1) : '';
                 const pct = Math.round((e.progress / CHALLENGES.length) * 100);
                 const done = e.progress >= CHALLENGES.length;
                 return `
                     <div class="lb-row ${isMe ? 'me' : ''}" data-name="${escapeHtml(e.name)}" role="button" tabindex="0" title="Ver el perfil de ${escapeHtml(e.name)}">
-                        <span class="lb-pos">${pos}</span>
+                        <span class="lb-pos${posCls}">${i + 1}</span>
                         <span class="lb-name">${escapeHtml(e.name)}${isMe ? '<span class="lb-you">TÚ</span>' : ''}</span>
-                        <span class="lb-prog">${e.progress}/${CHALLENGES.length}${done ? ' · 🏁' : ''}</span>
+                        <span class="lb-prog">${e.progress}/${CHALLENGES.length}${done ? ' · ✓' : ''}</span>
                         <span class="lb-bar"><i style="width:${pct}%"></i></span>
                     </div>
                 `;
@@ -1507,11 +1550,20 @@
             if (!el) return;
             el.innerHTML = html + (pagerHtml ? `<div class="party-pager lb-pager">${pagerHtml}</div>` : '');
 
-            // Paginación de la clasificación
+            // Entrada de las filas: una sola vez y con fundido suave
+            if (animate && !loading && !error) {
+                el.classList.remove('lb-animate');
+                void el.offsetWidth;
+                el.classList.add('lb-animate');
+                clearTimeout(el._lbAnimT);
+                el._lbAnimT = setTimeout(() => el.classList.remove('lb-animate'), 900);
+            }
+
+            // Paginaci�n de la clasificaci�n
             el.querySelectorAll('.lb-pager .pager-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     lbPage += btn.dataset.dir === 'next' ? 1 : -1;
-                    renderLeaderboard();
+                    renderLeaderboard(false, false, true);
                 });
             });
             // Tocar una fila abre el perfil de esa persona
@@ -1549,6 +1601,12 @@
         if (!modal) return;
         const key = normalizeName(name);
         const photosBox = $('#profile-photos');
+        // Acciones propias (descargar, clasificacion, salir) solo en mi perfil
+        const isMe = !!state.username && key === normalizeName(state.username);
+        const acts = $('#profile-actions');
+        if (acts) acts.hidden = !isMe;
+        const sumBtn = $('#profile-summary');
+        if (sumBtn) sumBtn.hidden = !(isMe && state.completedChallenges.length >= CHALLENGES.length);
 
         $('#profile-name').textContent = name;
         $('#profile-avatar').textContent = (String(name).trim().charAt(0) || '?').toUpperCase();
