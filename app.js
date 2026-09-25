@@ -103,6 +103,16 @@
 
     // ── PERSISTENCE ──────────────────────────────────────────
     function loadState() {
+        // Se parte SIEMPRE de una sesión limpia: al cerrar y volver
+        // a entrar con otro nombre (sin recargar la página), los retos
+        // y fotos del usuario anterior no se cuelan en la cuenta nueva
+        // ni se guardan bajo su clave.
+        const fresh = {
+            username: state.username,
+            completedChallenges: [],
+            photos: {},
+            currentChallengeId: null
+        };
         try {
             if (state.username) {
                 const key = storageKey();
@@ -116,9 +126,35 @@
                         localStorage.removeItem(legacyKey);
                     }
                 }
-                if (saved) state = { ...state, ...JSON.parse(saved) };
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (Array.isArray(parsed.completedChallenges)) fresh.completedChallenges = parsed.completedChallenges;
+                    if (parsed.photos && typeof parsed.photos === 'object') fresh.photos = parsed.photos;
+                }
             }
         } catch (e) {}
+        dropForeignPhotos(fresh);
+        state = fresh;
+    }
+
+    // Cada foto vive en la carpeta de quien la subió
+    // (gymkana-boda/<nombre-normalizado>/...). Si esta clave contiene
+    // fotos de otra carpeta, son restos de una sesión anterior (claves
+    // ya contaminadas por el antiguo bug de cambio de usuario): se
+    // descartan y los retos que dependían de ellas dejan de contar.
+    function dropForeignPhotos(target) {
+        const owner = normalizeName(target.username);
+        if (!owner) return;
+        Object.keys(target.photos || {}).forEach((id) => {
+            const url = String((target.photos[id] && target.photos[id].url) || '');
+            const m = url.match(/\/gymkana-boda\/([^/]+)\//);
+            if (!m) return; // sin carpeta clara: se respeta
+            let folder = m[1];
+            try { folder = decodeURIComponent(folder); } catch (e) {}
+            if (normalizeName(folder) !== owner) delete target.photos[id];
+        });
+        // Un reto solo está completado si su foto sigue aquí
+        target.completedChallenges = (target.completedChallenges || []).filter((id) => target.photos[id]);
     }
 
     function saveState() {
@@ -302,7 +338,9 @@
 
         function logout() {
             saveState();
-            state.username = null;
+            // Sesión completamente limpia: nada del usuario anterior
+            // queda en memoria para la siguiente cuenta que entre.
+            state = { username: null, completedChallenges: [], photos: {}, currentChallengeId: null };
             closeProfile();
             closeLeaderboard();
             navigateTo('welcome');
