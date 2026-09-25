@@ -1,5 +1,5 @@
 // ============================================================
-// GYMKANA FOTOGRÁFICA — APP LOGIC
+// GINCANA FOTOGRÁFICA — APP LOGIC
 // ============================================================
 
 (function () {
@@ -1169,7 +1169,7 @@
                 }
                 progressText.textContent = 'Creando el ZIP…';
                 const out = await zip.generateAsync({ type: 'blob' });
-                await deliverFile(out, 'gymkana-fotografica.zip');
+                await deliverFile(out, 'gincana-fotografica.zip');
             }
             closeDownloadModal();
             showToast('Descarga iniciada ✓', 3000, 'success');
@@ -1505,7 +1505,7 @@
         const list = lbList;
         const mine = state.username ? normalizeName(state.username) : '';
         let html = '';
-        let subtitle = 'Quién va primero en la gymkana';
+        let subtitle = 'Quién va primero en la gincana';
         let pagerHtml = '';
 
         if (loading) {

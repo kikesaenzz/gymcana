@@ -1,4 +1,4 @@
-# Gymkana Fotográfica 💒📷
+# Gincana Fotográfica 💒📷
 
 Web de retos fotográficos para invitados de la boda: cada invitado se registra con su nombre, completa retos (fotos temáticas), las sube desde el móvil y puede descargar todas las fotos al final.
 
@@ -28,7 +28,7 @@ Web de retos fotográficos para invitados de la boda: cada invitado se registra 
 - **Progreso**: se guarda en `localStorage` y se sincroniza con `/api/sync?username=...` para recuperar las fotos ya enviadas desde cualquier dispositivo.
 - **Galería de la fiesta**: al terminar los 14 retos se muestra la galería global (`GET /api/gallery`) con todas las fotos, paginadas (12 por página) y quién las subió.
 - **Clasificación en vivo**: botón 🏆 en la cabecera (y sección al final de la web) con el ranking: primero quien lleve más retos y, a igualdad, quien lo haya hecho antes; tu fila va resaltada con tu puesto.
-- **Descarga en ZIP**: «Descargar todas» o las seleccionadas genera un `gymkana-fotografica.zip` (JSZip), porque el atributo `download` no funciona con URLs de Cloudinary.
+- **Descarga en ZIP**: «Descargar todas» o las seleccionadas genera un `gincana-fotografica.zip` (JSZip), porque el atributo `download` no funciona con URLs de Cloudinary.
 - **Nombre protegido**: si el nombre ya está registrado se pide confirmación («¿Seguro que eres tú?») y la primera vez aparece la pista «pon un nombre identificativo».
 
 ## Variables de entorno (Vercel)

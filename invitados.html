@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <title>Invitados · Gymkana Boda</title>
+    <title>Invitados · Gincana Boda</title>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -66,7 +66,7 @@
 <body>
 <main>
     <h1>📋 Invitados registrados</h1>
-    <p class="muted">Gymkana Fotográfica — quién se ha registrado y cuántas fotos ha subido.</p>
+    <p class="muted">Gincana Fotográfica — quién se ha registrado y cuántas fotos ha subido.</p>
 
     <div class="stats" id="stats"></div>
 
@@ -193,7 +193,7 @@
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'invitados-gymkana.csv';
+        a.download = 'invitados-gincana.csv';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

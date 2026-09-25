@@ -1,7 +1,7 @@
 {
-    "name": "Gymkana Fotográfica",
-    "short_name": "Gymkana",
-    "description": "Gymkana fotográfica de la boda: completa retos y sube tus fotos",
+    "name": "Gincana Fotográfica",
+    "short_name": "Gincana",
+    "description": "Gincana fotográfica de la boda: completa retos y sube tus fotos",
     "start_url": "/",
     "scope": "/",
     "display": "standalone",
