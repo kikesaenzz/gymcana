@@ -1,4 +1,14 @@
 {
+    "redirects": [
+        {
+            "source": "/(.*)",
+            "destination": "https://gincana-boda.vercel.app/$1",
+            "permanent": true,
+            "has": [
+                { "type": "host", "value": "gymkana-boda-nu.vercel.app" }
+            ]
+        }
+    ],
     "headers": [
         {
             "source": "/manifest.webmanifest",
