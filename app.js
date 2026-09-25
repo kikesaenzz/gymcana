@@ -1431,26 +1431,35 @@
     // (su última foto más antigua) — es decir, quien va ganando.
     function buildRanking(users, photos) {
         const map = new Map();
-        users.forEach(u => {
-            const k = normalizeName(u && u.name);
-            if (!k) return;
-            map.set(k, { name: String(u.name), progress: 0, last: '', registered: u.registered || '' });
-        });
-        photos.forEach(p => {
-            const k = normalizeName(p && p.user);
-            if (!k) return;
+        const entry = (name, registered) => {
+            const k = normalizeName(name);
+            if (!k) return null;
             let e = map.get(k);
             if (!e) {
-                e = { name: String(p.user), progress: 0, last: '', registered: '' };
+                e = { name: String(name), progress: 0, last: '', registered: registered || '', done: new Set() };
                 map.set(k, e);
             }
+            return e;
+        };
+        users.forEach(u => entry(u && u.name, u && u.registered));
+        photos.forEach(p => {
+            const e = entry(p && p.user);
+            if (!e) return;
+            // Cuenta retos DISTINTOS: repetir la foto de un reto
+            // (o subirlas varias veces) no suma progreso.
+            const rid = p && p.reto != null && p.reto !== '' ? String(p.reto) : null;
+            if (rid !== null && e.done.has(rid)) return;
+            if (rid !== null) e.done.add(rid);
             e.progress++;
             const created = p.createdAt || '';
             if (created > e.last) e.last = created;
         });
 
         const arr = [...map.values()];
-        arr.forEach(e => { e.progress = Math.min(CHALLENGES.length, e.progress); });
+        arr.forEach(e => {
+            e.progress = Math.min(CHALLENGES.length, e.progress);
+            delete e.done;
+        });
         arr.sort((a, b) => {
             if (b.progress !== a.progress) return b.progress - a.progress;
             if (a.last && b.last && a.last !== b.last) return a.last < b.last ? -1 : 1;
