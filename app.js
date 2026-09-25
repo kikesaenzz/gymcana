@@ -65,9 +65,40 @@
             .replace(/'/g, '&#39;');
     }
 
+    // Miniatura ligera para las cuadrículas: el original solo se usa
+    // al abrir la foto en grande o al descargarla (rendimiento)
+    function thumbUrl(url) {
+        if (!url || url.indexOf('data:') === 0 || url.indexOf('/upload/') === -1) return url;
+        if (url.indexOf('/upload/w_') !== -1) return url; // ya es miniatura
+        return url.replace('/upload/', '/upload/w_500,q_auto:eco/');
+    }
+
+    // Atributos de imagen: carga diferida + fundido al aparecer
+    const IMG_ATTRS = 'loading="lazy" decoding="async" class="ph-img" onload="this.classList.add(\'img-ready\');this.parentElement.classList.add(\'img-loaded\')" onerror="this.classList.add(\'img-ready\');this.parentElement.classList.add(\'img-loaded\')"';
+
+    // True mientras se arrastra el carrusel con el ratón: evita que
+    // el clic que termina el arrastre abra un reto por accidente
+    let carouselDragMoved = false;
+
     // ── INIT ─────────────────────────────────────────────
+    let initialized = false;
+
     function init() {
+        // Solo una vez: si el evento DOMContentLoaded llega dos veces
+        // (por ejemplo en tests), los listeners no se duplican
+        if (initialized) return;
+        initialized = true;
         bindEvents();
+        // Se recuerda el último nombre usado en este dispositivo:
+        // se rellena solo y el botón queda listo para pulsar.
+        try {
+            const last = localStorage.getItem(STORAGE_PREFIX + 'last_user');
+            if (last) {
+                const input = $('#username-input');
+                input.value = last;
+                $('#btn-start').disabled = false;
+            }
+        } catch (e) {}
     }
 
     // ── PERSISTENCE ──────────────────────────────────────────
@@ -216,6 +247,7 @@
             state.username = name;
             loadState();
             state.username = name;
+            try { localStorage.setItem(STORAGE_PREFIX + 'last_user', name); } catch (e) {}
             registerUser(name);
             await syncFromCloud();
             saveState();
@@ -361,27 +393,61 @@
         });
         $('#dl-go').addEventListener('click', downloadSelected);
 
-        // Filtro por persona dentro del selector de descarga
-        $('#dl-filter-select').addEventListener('change', (e) => {
-            dlFilter = e.target.value;
-            const items = dlItems();
-            // Al cambiar de persona se empieza con todo lo visible seleccionado
-            dlSelected = new Set(items.map(it => it.key));
-            renderDlGrid();
-            updateDlActions();
-        });
+        // Filtro por persona dentro del selector de descarga (desplegable propio)
+        // (se maneja con los botones .person-dd-btn; ver renderPersonDropdown)
 
         // Galería de la fiesta, lightbox y clasificación
-        $('#btn-refresh-gallery').addEventListener('click', loadPartyGallery);
-        $('#party-filter-select').addEventListener('change', (e) => {
-            partyFilter = e.target.value;
-            partyPage = 1;
-            renderPartyPage();
+        $('#btn-refresh-gallery').addEventListener('click', () => loadPartyGallery(true));
+
+        // Pantalla final: cada sección se carga al tocar su botón
+        bindViewToggle('#btn-view-mine', '#complete-mine-wrap', renderCompleteGallery);
+        bindViewToggle('#btn-view-party', '#party-gallery-wrap', loadPartyGallery);
+        // La clasificación se abre como el banner de la página de retos
+        $('#btn-view-lb').addEventListener('click', openLeaderboard);
+
+        // Descargar todas las fotos (de todos los invitados)
+        $('#btn-download-party-final').addEventListener('click', async () => {
+            if (!partyPhotos.length) {
+                showToast('Cargando las fotos de la fiesta…', 2500);
+                await loadPartyGallery();
+            }
+            openDownloadModal('party');
+        });
+
+        // Cerrar los desplegables de personas al tocar fuera
+        document.addEventListener('click', (e) => {
+            document.querySelectorAll('.person-dd.open').forEach(dd => {
+                if (!dd.contains(e.target)) {
+                    dd.classList.remove('open');
+                    const b = dd.querySelector('.person-dd-btn');
+                    if (b) b.setAttribute('aria-expanded', 'false');
+                }
+            });
         });
         $('#lightbox-close').addEventListener('click', closeLightbox);
         $('#photo-lightbox').addEventListener('click', (e) => {
             if (e.target.id === 'photo-lightbox') closeLightbox();
         });
+
+        // Navegación del lightbox: botones, flechas del teclado y swipe
+        $('#lightbox-prev').addEventListener('click', () => navLightbox(-1));
+        $('#lightbox-next').addEventListener('click', () => navLightbox(1));
+        document.addEventListener('keydown', (e) => {
+            const lb = $('#photo-lightbox');
+            if (!lb || !lb.classList.contains('active')) return;
+            if (e.key === 'ArrowLeft') { e.preventDefault(); navLightbox(-1); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); navLightbox(1); }
+        });
+        let lbTouchX = null;
+        $('#photo-lightbox').addEventListener('touchstart', (e) => {
+            lbTouchX = e.touches.length === 1 ? e.touches[0].clientX : null;
+        }, { passive: true });
+        $('#photo-lightbox').addEventListener('touchend', (e) => {
+            if (lbTouchX == null) return;
+            const dx = e.changedTouches[0].clientX - lbTouchX;
+            lbTouchX = null;
+            if (Math.abs(dx) > 45) navLightbox(dx < 0 ? 1 : -1);
+        }, { passive: true });
         $('#btn-leaderboard').addEventListener('click', openLeaderboard);
         $('#leaderboard-close').addEventListener('click', closeLeaderboard);
         $('#leaderboard-overlay').addEventListener('click', (e) => {
@@ -410,11 +476,89 @@
         // (antes se añadían en cada render y los puntos no se movían
         // porque el cálculo usaba el contenedor equivocado)
         const track = $('#carousel-track');
-        track.addEventListener('scroll', updateDots, { passive: true });
+        // updateDots va limitado a un frame: evitar layout en cada scroll
+        let dotsFrame = 0;
+        track.addEventListener('scroll', () => {
+            if (dotsFrame) return;
+            dotsFrame = requestAnimationFrame(() => { dotsFrame = 0; updateDots(); });
+        }, { passive: true });
         track.addEventListener('wheel', function (e) {
             e.preventDefault();
             track.scrollLeft += e.deltaY * 2;
         }, { passive: false });
+
+        // Escritorio: arrastrar con el ratón para deslizar entre retos
+        let dragging = false, dragStartX = 0, dragStartScroll = 0;
+        track.addEventListener('pointerdown', (e) => {
+            if (e.pointerType === 'touch') return; // el táctil ya desliza solo
+            dragging = true;
+            carouselDragMoved = false;
+            dragStartX = e.clientX;
+            dragStartScroll = track.scrollLeft;
+        });
+        track.addEventListener('pointermove', (e) => {
+            if (!dragging) return;
+            const dx = e.clientX - dragStartX;
+            if (Math.abs(dx) > 5) carouselDragMoved = true;
+            track.scrollLeft = dragStartScroll - dx;
+        });
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => {
+            track.addEventListener(ev, () => { dragging = false; });
+        });
+
+        // Dots inferiores: mantener el dedo los agranda y deslizar
+        // sobre ellos salta rápidamente de tarjeta en tarjeta
+        const dotsBar = $('#carousel-dots');
+        let scrubbing = false;
+        let scrubIdx = -1;
+
+        const nearestDot = (clientX) => {
+            const dots = dotsBar.querySelectorAll('.carousel-dot');
+            let best = -1, bestDist = Infinity;
+            dots.forEach((d, i) => {
+                const r = d.getBoundingClientRect();
+                const dist = Math.abs(r.left + r.width / 2 - clientX);
+                if (dist < bestDist) { bestDist = dist; best = i; }
+            });
+            return best;
+        };
+
+        const scrollToCard = (i, behavior) => {
+            const cards = track.querySelectorAll('.carousel-card');
+            const card = cards[i];
+            if (!card) return;
+            track.scrollTo({
+                left: card.offsetLeft + card.offsetWidth / 2 - track.offsetWidth / 2,
+                behavior: behavior || 'smooth'
+            });
+        };
+
+        const endScrub = () => {
+            if (!scrubbing) return;
+            scrubbing = false;
+            scrubIdx = -1;
+            dotsBar.classList.remove('scrubbing');
+        };
+
+        dotsBar.addEventListener('pointerdown', (e) => {
+            scrubbing = true;
+            scrubIdx = nearestDot(e.clientX);
+            dotsBar.classList.add('scrubbing');
+            if (dotsBar.setPointerCapture) { try { dotsBar.setPointerCapture(e.pointerId); } catch (_) {} }
+            if (scrubIdx >= 0) scrollToCard(scrubIdx, 'auto');
+            e.preventDefault();
+        });
+        dotsBar.addEventListener('pointermove', (e) => {
+            if (!scrubbing) return;
+            const i = nearestDot(e.clientX);
+            if (i >= 0 && i !== scrubIdx) {
+                scrubIdx = i;
+                scrollToCard(i, 'auto');
+            }
+        });
+        dotsBar.addEventListener('pointerup', endScrub);
+        dotsBar.addEventListener('pointercancel', endScrub);
+        dotsBar.addEventListener('pointerleave', endScrub);
     }
 
     // ── RENDER CAROUSEL ──────────────────────────────────────
@@ -479,6 +623,7 @@
         // Click on card centers it, then opens if current
         track.querySelectorAll('.carousel-card').forEach(function(card) {
             card.addEventListener('click', function() {
+                if (carouselDragMoved) return;
                 var id = parseInt(card.dataset.id);
                 var challenge = CHALLENGES.find(function(c) { return c.id === id; });
                 var isCompleted = state.completedChallenges.includes(id);
@@ -715,33 +860,74 @@
             </div>
         `;
 
-        renderCompleteGallery();
-        loadPartyGallery();
-        const lbSection = $('#leaderboard-section');
-        if (lbSection) lbSection.hidden = false;
-        loadLeaderboard();
+        // Las secciones de abajo (mis fotos, fiesta, clasificación)
+        // se cargan solo cuando se pide: así la pantalla entra al instante
+        hideCompleteSections();
         createConfetti();
         navigateTo('complete');
     }
 
+    function hideCompleteSections() {
+        ['#complete-mine-wrap', '#party-gallery-wrap'].forEach(sel => {
+            const sec = $(sel);
+            if (!sec) return;
+            sec.hidden = true;
+            delete sec.dataset.loaded;
+        });
+        [['#btn-view-mine', '#complete-mine-wrap'], ['#btn-view-party', '#party-gallery-wrap']]
+            .forEach(([b, s]) => {
+                const btn = $(b);
+                if (!btn) return;
+                btn.classList.remove('active');
+                btn.setAttribute('aria-expanded', 'false');
+            });
+    }
+
+    // Alterna cada sección de la pantalla final y carga su contenido
+    // una sola vez (carga diferida)
+    function bindViewToggle(btnSel, secSel, loader) {
+        const btn = $(btnSel);
+        const sec = $(secSel);
+        if (!btn || !sec) return;
+        btn.addEventListener('click', () => {
+            const show = sec.hidden;
+            if (show) {
+                if (!sec.dataset.loaded) {
+                    sec.dataset.loaded = '1';
+                    loader();
+                }
+                sec.hidden = false;
+            } else {
+                sec.hidden = true;
+            }
+            btn.classList.toggle('active', show);
+            btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+        });
+    }
+
     function renderCompleteGallery() {
+        let idx = 0;
         const galleryHTML = CHALLENGES.map(c => {
             const photo = state.photos[c.id];
             if (!photo) return '';
+            const delay = (Math.min(idx++, 12) * 0.05).toFixed(3);
             return `
-                <div class="gallery-item" data-id="${c.id}">
-                    <img src="${photo.url}" alt="${c.title}" loading="lazy">
+                <div class="gallery-item" data-id="${c.id}" style="animation-delay:${delay}s">
+                    <img src="${escapeHtml(thumbUrl(photo.url))}" alt="${escapeHtml(c.title)}" ${IMG_ATTRS}>
                     <div class="gallery-item-label">${c.title}</div>
                 </div>
             `;
         }).join('');
         $('#complete-gallery').innerHTML = galleryHTML;
 
-        // Tocar una foto propia la abre en grande
+        // Tocar una foto propia la abre en grande (con navegación entre ellas)
+        const minePhotos = CHALLENGES.filter(c => state.photos[c.id])
+            .map(c => ({ url: state.photos[c.id].url, user: state.username, reto: c.id }));
         $('#complete-gallery').querySelectorAll('.gallery-item').forEach(item => {
             item.addEventListener('click', () => {
                 const id = parseInt(item.dataset.id, 10);
-                openLightbox({ url: state.photos[id].url, user: state.username, reto: id });
+                const photo = minePhotos.find(p => p.reto === id);
+                openLightbox(photo, minePhotos);
             });
         });
     }
@@ -799,11 +985,8 @@
         $('#dl-title').textContent = source === 'party' ? 'Fotos de la fiesta' : 'Mis fotos';
         $('#dl-sub').textContent = 'Toca las fotos para elegir · 👁 para verlas en grande';
         // Filtro por persona: solo en la fiesta y con 2+ personas
-        const filterWrap = $('#dl-filter');
-        if (filterWrap) {
-            if (source === 'party') populateFilterSelect($('#dl-filter-select'), partyPhotos);
-            else filterWrap.hidden = true;
-        }
+        if (source === 'party') renderPersonDropdown('dl-dd', partyPhotos, dlFilter, onDlFilterPick);
+        else $('#dl-filter').hidden = true;
         $('#dl-progress').hidden = true;
         renderDlGrid();
         updateDlActions();
@@ -819,9 +1002,9 @@
         const grid = $('#dl-grid');
         if (!grid) return;
         const items = dlItems();
-        grid.innerHTML = items.map(it => `
-            <figure class="dl-item ${dlSelected.has(it.key) ? 'selected' : ''}" data-key="${it.key}">
-                <img src="${escapeHtml(it.thumb)}" alt="${escapeHtml(it.title)}" loading="lazy">
+        grid.innerHTML = items.map((it, k) => `
+            <figure class="dl-item ${dlSelected.has(it.key) ? 'selected' : ''}" data-key="${it.key}" style="animation-delay:${(k * 0.04).toFixed(3)}s">
+                <img src="${escapeHtml(thumbUrl(it.thumb))}" alt="${escapeHtml(it.title)}" ${IMG_ATTRS}>
                 <span class="dl-check" aria-hidden="true">&#10003;</span>
                 <button type="button" class="dl-view" title="Ver foto" aria-label="Ver foto">&#128065;</button>
             </figure>
@@ -831,8 +1014,12 @@
             fig.addEventListener('click', (e) => {
                 const key = fig.dataset.key;
                 if (e.target.closest('.dl-view')) {
-                    const it = dlItems().find(x => x.key === key);
-                    if (it) openLightbox({ url: it.full, user: it.user, reto: it.reto });
+                    const visible = dlItems();
+                    const i = visible.findIndex(x => x.key === key);
+                    if (i >= 0) {
+                        const it = visible[i];
+                        openLightbox({ url: it.full, user: it.user, reto: it.reto }, visible, i);
+                    }
                     return;
                 }
                 if (dlSelected.has(key)) dlSelected.delete(key);
@@ -981,25 +1168,88 @@
         return [...map.values()].sort((a, b) => b.count - a.count);
     }
 
-    function populateFilterSelect(sel, photos) {
-        if (!sel) return;
+    // Desplegable de personas (diseño propio, adaptado a la web):
+    // botón con la selección actual y menú con avatar, nombre y contador.
+    function renderPersonDropdown(ddId, photos, currentValue, onSelect) {
+        const dd = document.getElementById(ddId);
+        if (!dd) return;
+        const filterWrap = dd.closest('.gallery-filter');
         const opts = userOptions(photos);
-        sel.innerHTML = '<option value="">Todas las personas</option>' +
-            opts.map(o => `<option value="${escapeHtml(o.key)}">${escapeHtml(o.label)} (${o.count})</option>`).join('');
-        sel.value = '';
         // Solo se muestra si hay varias personas que filtrar
-        const wrap = sel.closest('.gallery-filter');
-        if (wrap) wrap.hidden = opts.length < 2;
+        if (filterWrap) filterWrap.hidden = opts.length < 2;
+        if (opts.length < 2) return;
+
+        const btn = dd.querySelector('.person-dd-btn');
+        const menu = dd.querySelector('.person-dd-menu');
+        const valueEl = dd.querySelector('.person-dd-value');
+
+        const all = [{ key: '', label: 'Todas las personas', count: photos.length }].concat(opts);
+        menu.innerHTML = all.map(o => `
+            <button type="button" class="person-dd-item${o.key === currentValue ? ' active' : ''}" data-key="${escapeHtml(o.key)}" role="option" aria-selected="${o.key === currentValue}">
+                <span class="person-dd-avatar">${escapeHtml(((o.label || '?').trim().charAt(0) || '?').toUpperCase())}</span>
+                <span class="person-dd-name">${escapeHtml(o.label)}</span>
+                <span class="person-dd-count">${o.count}</span>
+            </button>
+        `).join('');
+
+        const current = all.find(o => o.key === currentValue) || all[0];
+        valueEl.textContent = current.label;
+
+        // Toggle del menú (registrado una sola vez)
+        if (!btn.dataset.bound) {
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const open = dd.classList.toggle('open');
+                btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            });
+        }
+
+        menu.querySelectorAll('.person-dd-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dd.classList.remove('open');
+                btn.setAttribute('aria-expanded', 'false');
+                onSelect(item.dataset.key || '');
+            });
+        });
     }
 
-    async function loadPartyGallery() {
+    function onPartyFilterPick(key) {
+        partyFilter = key;
+        partyPage = 1;
+        renderPartyPage();
+        renderPersonDropdown('party-dd', partyPhotos, partyFilter, onPartyFilterPick);
+    }
+
+    function onDlFilterPick(key) {
+        dlFilter = key;
+        const items = dlItems();
+        // Al cambiar de persona se empieza con todo lo visible seleccionado
+        dlSelected = new Set(items.map(it => it.key));
+        renderDlGrid();
+        updateDlActions();
+        renderPersonDropdown('dl-dd', partyPhotos, dlFilter, onDlFilterPick);
+    }
+
+    async function loadPartyGallery(force) {
         const wrap = $('#party-gallery-wrap');
         const grid = $('#party-gallery');
         const pager = $('#party-pager');
         if (!wrap || !grid) return;
         wrap.hidden = false;
-        grid.innerHTML = '<p class="party-loading">Cargando fotos…</p>';
-        if (pager) pager.innerHTML = '';
+
+        // Si ya hay fotos en memoria se pintan al instante y, mientras
+        // tanto, se refresca en segundo plano (mucho más fluido)
+        const hasCache = partyPhotos.length > 0;
+        if (hasCache) {
+            renderPersonDropdown('party-dd', partyPhotos, partyFilter, onPartyFilterPick);
+            renderPartyPage();
+        } else {
+            grid.innerHTML = '<p class="party-loading">Cargando fotos…</p>';
+            if (pager) pager.innerHTML = '';
+        }
+
         try {
             const res = await fetch('/api/gallery');
             if (!res.ok) throw new Error('Error cargando la galería');
@@ -1007,17 +1257,25 @@
             if (!Array.isArray(photos)) throw new Error('Respuesta no válida');
             photos.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
             partyPhotos = photos;
-            partyPage = 1;
-            partyFilter = '';
-            populateFilterSelect($('#party-filter-select'), partyPhotos);
+            if (!hasCache) {
+                partyPage = 1;
+                partyFilter = '';
+            }
+            renderPersonDropdown('party-dd', partyPhotos, partyFilter, onPartyFilterPick);
 
             if (partyPhotos.length === 0) {
                 grid.innerHTML = '<p class="party-empty">Todavía no hay fotos en la galería.</p>';
+                if (pager) pager.innerHTML = '';
                 return;
             }
             renderPartyPage();
+            if (force && hasCache) showToast('Galería actualizada', 2000, 'success');
         } catch (e) {
-            grid.innerHTML = '<p class="party-empty">No se pudo cargar la galería. Pulsa «Actualizar».</p>';
+            if (!hasCache) {
+                grid.innerHTML = '<p class="party-empty">No se pudo cargar la galería. Pulsa «Actualizar».</p>';
+            } else {
+                showToast('No se pudo actualizar la galería', 3000);
+            }
         }
     }
 
@@ -1044,13 +1302,13 @@
         const start = (partyPage - 1) * PARTY_PAGE_SIZE;
         const slice = list.slice(start, start + PARTY_PAGE_SIZE);
 
-        grid.innerHTML = slice.map(p => {
+        grid.innerHTML = slice.map((p, k) => {
             const who = p.user ? `👤 ${escapeHtml(p.user)}` : '👤 Invitado';
             // Índice dentro de partyPhotos para el lightbox
             const i = partyPhotos.indexOf(p);
             return `
-                <figure class="party-photo" data-i="${i}">
-                    <img src="${escapeHtml(p.thumb || p.url)}" alt="${who}" loading="lazy">
+                <figure class="party-photo" data-i="${i}" style="animation-delay:${(k * 0.045).toFixed(3)}s">
+                    <img src="${escapeHtml(thumbUrl(p.thumb || p.url))}" alt="${who}" ${IMG_ATTRS}>
                     <figcaption class="party-badge">${who}</figcaption>
                 </figure>
             `;
@@ -1058,7 +1316,8 @@
 
         grid.querySelectorAll('.party-photo').forEach(fig => {
             fig.addEventListener('click', () => {
-                openLightbox(partyPhotos[parseInt(fig.dataset.i, 10)]);
+                const photo = partyPhotos[parseInt(fig.dataset.i, 10)];
+                openLightbox(photo, list);
             });
         });
 
@@ -1075,20 +1334,56 @@
         }
     }
 
-    function openLightbox(photo) {
+    // Lightbox con navegación: se le pasa la foto y la lista completa
+    // (fotos visibles) para moverse con los botones, el teclado o el swipe
+    let lbPhotos = [];
+    let lbIndex = -1;
+
+    function openLightbox(photo, list, index) {
         if (!photo) return;
+        if (Array.isArray(list) && list.length > 0) {
+            lbPhotos = list;
+            let i = (typeof index === 'number' && index >= 0) ? index : list.indexOf(photo);
+            if (i < 0) i = list.findIndex(p => p && (p.url === photo.url || p.full === photo.url));
+            lbIndex = i >= 0 ? i : 0;
+        } else {
+            lbPhotos = [photo];
+            lbIndex = 0;
+        }
+        showLightboxPhoto();
+        $('#photo-lightbox').classList.add('active');
+    }
+
+    function showLightboxPhoto() {
+        const photo = lbPhotos[lbIndex];
+        if (!photo) return;
+        const src = photo.url || photo.full;
         const challenge = CHALLENGES.find(c => c.id === photo.reto);
         const parts = [];
         if (photo.user) parts.push(`Subida por ${photo.user}`);
         if (challenge) parts.push(`Reto: ${challenge.title}`);
-        $('#lightbox-img').src = photo.url;
+        $('#lightbox-img').src = src;
         $('#lightbox-caption').textContent = parts.join(' · ');
-        $('#photo-lightbox').classList.add('active');
+
+        const multi = lbPhotos.length > 1;
+        const count = $('#lightbox-count');
+        count.hidden = !multi;
+        if (multi) count.textContent = `${lbIndex + 1} / ${lbPhotos.length}`;
+        $('#lightbox-prev').hidden = !multi;
+        $('#lightbox-next').hidden = !multi;
+    }
+
+    function navLightbox(dir) {
+        if (lbPhotos.length < 2) return;
+        lbIndex = (lbIndex + dir + lbPhotos.length) % lbPhotos.length;
+        showLightboxPhoto();
     }
 
     function closeLightbox() {
         const box = $('#photo-lightbox');
         if (box) box.classList.remove('active');
+        lbPhotos = [];
+        lbIndex = -1;
     }
 
     // ── CLASIFICACIÓN ────────────────────────────────────────
@@ -1286,19 +1581,20 @@
                 photosBox.innerHTML = '<p class="lb-empty">Todavía no ha subido fotos.</p>';
                 return;
             }
-            photosBox.innerHTML = mine.map(p => {
+            photosBox.innerHTML = mine.map((p, k) => {
                 const i = partyPhotos.indexOf(p);
                 const ch = p.reto != null ? CHALLENGES.find(c => c.id === p.reto) : null;
                 return `
-                    <figure class="party-photo" data-i="${i}">
-                        <img src="${escapeHtml(p.thumb || p.url)}" alt="${escapeHtml(ch ? ch.title : 'Foto')}" loading="lazy">
+                    <figure class="party-photo" data-i="${i}" style="animation-delay:${(k * 0.045).toFixed(3)}s">
+                        <img src="${escapeHtml(thumbUrl(p.thumb || p.url))}" alt="${escapeHtml(ch ? ch.title : 'Foto')}" ${IMG_ATTRS}>
                         <figcaption class="party-badge">${ch ? escapeHtml(ch.title) : 'Foto'}</figcaption>
                     </figure>
                 `;
             }).join('');
             photosBox.querySelectorAll('.party-photo').forEach(fig => {
                 fig.addEventListener('click', () => {
-                    openLightbox(partyPhotos[parseInt(fig.dataset.i, 10)]);
+                    const photo = partyPhotos[parseInt(fig.dataset.i, 10)];
+                    openLightbox(photo, mine);
                 });
             });
         } catch (e) {
@@ -1315,7 +1611,7 @@
     function createConfetti() {
         const container = $('#confetti-container');
         container.innerHTML = '';
-        const colors = ['#b8956a', '#ffffff', '#a8e6cf', '#f4c2c2', '#d4c5f9'];
+        const colors = ['#b8956a', '#ffffff', '#f7bcd2', '#f4c2c2', '#d4c5f9'];
 
         for (let i = 0; i < 50; i++) {
             const piece = document.createElement('div');

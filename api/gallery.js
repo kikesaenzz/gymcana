@@ -60,7 +60,7 @@ module.exports = async (req, res) => {
             const secure = r.secure_url || '';
             return {
                 url: secure,
-                thumb: secure.replace('/upload/', '/upload/w_600/'),
+                thumb: secure.replace('/upload/', '/upload/w_500,q_auto:eco/'),
                 user,
                 reto,
                 fileName: r.display_name || '',
