@@ -12,7 +12,19 @@ const CLOUDINARY_CONFIG = {
   folder: 'gymkana-boda',           // Folder donde se guardan las fotos
 };
 
+// ============================================================
+// EVENTO POR DEFECTO (multi-boda)
+// Cada boda tiene su propia URL, sus datos y sus fotos:
+//   https://tudominio.com/boda/ana-y-carlos
+//   https://tudominio.com/?event=ana-y-carlos
+// Si no llega ningún evento en la URL se usa este.
+// ============================================================
+const APP_CONFIG = {
+  defaultEvent: 'boda',
+  defaultEventLabel: 'Nuestra Boda',
+};
+
 // Export para uso como módulo
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = CLOUDINARY_CONFIG;
+  module.exports = { CLOUDINARY_CONFIG, APP_CONFIG };
 }

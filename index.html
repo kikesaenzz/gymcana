@@ -2,6 +2,12 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <!-- Abrir index.html directamente desde disco (file://) no admite
+         rutas /boda/<slug>: en ese caso la base es relativa. El <base>
+         de abajo solo se aplica si el anterior no existe (primer <base> gana). -->
+    <script>if (location.protocol === 'file:') document.write('<base href="./">');</script>
+    <!-- Assets siempre desde la raíz: permite las URLs /boda/<slug> -->
+    <base href="/">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#141020">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -120,6 +126,7 @@
                 </div>
                 <div class="upload-preview" id="upload-preview" style="display:none;">
                     <img id="preview-img" src="" alt="Preview">
+                    <span class="current-chip" id="current-chip" hidden>Foto actual · toca «Cambiar foto» para sustituirla</span>
                     <button class="btn-remove" id="btn-remove">Cambiar foto</button>
                 </div>
             </div>
@@ -314,6 +321,7 @@
     <!-- Lightbox de la galería -->
     <div class="photo-lightbox" id="photo-lightbox">
         <button class="lightbox-close" id="lightbox-close" aria-label="Cerrar">&times;</button>
+        <span class="lightbox-zoom-hint" id="lightbox-zoom-hint">Pellizca o doble toque para ampliar</span>
         <span class="lightbox-count" id="lightbox-count" hidden></span>
         <button class="lb-nav lb-nav-prev" id="lightbox-prev" aria-label="Foto anterior" hidden>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>

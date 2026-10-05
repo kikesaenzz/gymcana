@@ -23,6 +23,55 @@
     ];
 
     const STORAGE_PREFIX = 'gymkana_boda_';
+    const DEFAULT_EVENT = (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.defaultEvent) || 'boda';
+
+    // ── EVENTO ACTIVO (multi-boda) ─────────────────────────
+    // Cada boda se sirve en su propia URL (/boda/<slug> o ?event=<slug>)
+    // y aísla por completo los datos: localStorage, carpetas de
+    // Cloudinary y etiquetas de las fotos.
+    function slugify(value) {
+        return String(value || '')
+            .trim().toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 60) || DEFAULT_EVENT;
+    }
+
+    function lastEventId() {
+        try { return localStorage.getItem(STORAGE_PREFIX + 'last_event') || ''; } catch (e) { return ''; }
+    }
+
+    function readEventId() {
+        try {
+            const fromPath = (location.pathname.match(/\/boda\/([^\/?#]+)/i) || [])[1];
+            const fromQuery = new URLSearchParams(location.search).get('event');
+            return slugify(fromPath || fromQuery || lastEventId() || DEFAULT_EVENT);
+        } catch (e) { return DEFAULT_EVENT; }
+    }
+
+    const EVENT = { id: readEventId() };
+
+    // URL única y compartible por boda: /boda/<slug>
+    function canonicalizeUrl() {
+        try {
+            localStorage.setItem(STORAGE_PREFIX + 'last_event', EVENT.id);
+            if (!/^https?:$/.test(location.protocol)) return;
+            const target = '/boda/' + EVENT.id;
+            if (location.pathname !== target) history.replaceState(null, '', target);
+        } catch (e) {}
+    }
+
+    function eventPrefix() { return STORAGE_PREFIX + EVENT.id + '_'; }
+    function lastUserKey() { return eventPrefix() + 'last_user'; }
+    function sessionKey() { return eventPrefix() + 'session'; }
+
+    function apiUrl(path, params) {
+        const q = new URLSearchParams(params || {});
+        q.set('event', EVENT.id);
+        return path + '?' + q.toString();
+    }
+
     let state = {
         username: null,
         completedChallenges: [],
@@ -53,7 +102,7 @@
     }
 
     function storageKey() {
-        return STORAGE_PREFIX + normalizeName(state.username);
+        return eventPrefix() + normalizeName(state.username);
     }
 
     function escapeHtml(value) {
@@ -83,16 +132,63 @@
     // ── INIT ─────────────────────────────────────────────
     let initialized = false;
 
+    // ── SESIÓN DE USUARIO ───────────────────────────────────
+    // Tras el primer ingreso el nombre queda guardado para esta boda:
+    // en futuras visitas o recargas se entra directo sin preguntarlo.
+    function readSession() {
+        try {
+            const raw = localStorage.getItem(sessionKey());
+            if (!raw) return null;
+            const s = JSON.parse(raw);
+            if (!s || normalizeName(s.name).length < 2 || s.event !== EVENT.id) return null;
+            return s;
+        } catch (e) { return null; }
+    }
+
+    function writeSession(name) {
+        try {
+            localStorage.setItem(sessionKey(), JSON.stringify({ name: name, event: EVENT.id, at: Date.now() }));
+        } catch (e) {}
+    }
+
+    function clearSession() {
+        try { localStorage.removeItem(sessionKey()); } catch (e) {}
+    }
+
+    function paintEntryScreen() {
+        if (state.completedChallenges.length >= CHALLENGES.length) showCompleteScreen();
+        else { renderCarousel(); navigateTo('challenges'); }
+    }
+
+    async function resumeSession(name) {
+        state.username = name;
+        loadState();
+        state.username = name;
+        paintEntryScreen();
+        registerUser(name);
+        // La nube se sincroniza en segundo plano: no bloquea la entrada
+        syncFromCloud().then(() => {
+            saveState();
+            if (document.querySelector('#screen-challenges.active')) paintEntryScreen();
+        });
+    }
+
     function init() {
         // Solo una vez: si el evento DOMContentLoaded llega dos veces
         // (por ejemplo en tests), los listeners no se duplican
         if (initialized) return;
         initialized = true;
         bindEvents();
-        // Se recuerda el último nombre usado en este dispositivo:
-        // se rellena solo y el botón queda listo para pulsar.
+        canonicalizeUrl();
+
+        // Ya hay sesión en este dispositivo y para esta boda → se entra directo
+        const session = readSession();
+        if (session) { resumeSession(session.name); return; }
+
+        // Sin sesión: se rellena el último nombre usado de esta boda
+        // (o el antiguo, previo al multi-evento) y queda listo para pulsar.
         try {
-            const last = localStorage.getItem(STORAGE_PREFIX + 'last_user');
+            const last = localStorage.getItem(lastUserKey()) || localStorage.getItem(STORAGE_PREFIX + 'last_user');
             if (last) {
                 const input = $('#username-input');
                 input.value = last;
@@ -118,12 +214,19 @@
                 const key = storageKey();
                 let saved = localStorage.getItem(key);
                 if (!saved) {
-                    // Migración: antes se guardaba con el nombre tal cual
-                    const legacyKey = STORAGE_PREFIX + state.username;
-                    saved = localStorage.getItem(legacyKey);
-                    if (saved) {
-                        localStorage.setItem(key, saved);
-                        localStorage.removeItem(legacyKey);
+                    // Migración: claves anteriores al multi-evento
+                    // (gymkana_boda_<nombre normalizado> y la versión
+                    // con el nombre tal cual, previa a la normalización)
+                    const legacyKeys = [
+                        STORAGE_PREFIX + normalizeName(state.username),
+                        STORAGE_PREFIX + state.username
+                    ];
+                    for (let i = 0; i < legacyKeys.length && !saved; i++) {
+                        saved = localStorage.getItem(legacyKeys[i]);
+                        if (saved) {
+                            localStorage.setItem(key, saved);
+                            localStorage.removeItem(legacyKeys[i]);
+                        }
                     }
                 }
                 if (saved) {
@@ -138,16 +241,18 @@
     }
 
     // Cada foto vive en la carpeta de quien la subió
-    // (gymkana-boda/<nombre-normalizado>/...). Si esta clave contiene
-    // fotos de otra carpeta, son restos de una sesión anterior (claves
-    // ya contaminadas por el antiguo bug de cambio de usuario): se
-    // descartan y los retos que dependían de ellas dejan de contar.
+    // (gymkana-boda/events/<evento>/<nombre-normalizado>/... y, antes
+    // del multi-evento, gymkana-boda/<nombre-normalizado>/...). Si esta
+    // clave contiene fotos de otra carpeta, son restos de una sesión
+    // anterior (claves ya contaminadas por el antiguo bug de cambio de
+    // usuario): se descartan y los retos que dependían de ellas dejan
+    // de contar.
     function dropForeignPhotos(target) {
         const owner = normalizeName(target.username);
         if (!owner) return;
         Object.keys(target.photos || {}).forEach((id) => {
             const url = String((target.photos[id] && target.photos[id].url) || '');
-            const m = url.match(/\/gymkana-boda\/([^/]+)\//);
+            const m = url.match(/\/gymkana-boda\/(?:events\/[^/]+\/)?([^/]+)\//);
             if (!m) return; // sin carpeta clara: se respeta
             let folder = m[1];
             try { folder = decodeURIComponent(folder); } catch (e) {}
@@ -176,7 +281,7 @@
             // nombre original (fotos subidas antes de normalizar).
             const keys = [...new Set([normalizeName(state.username), state.username])].filter(Boolean);
             const responses = await Promise.all(keys.map(k =>
-                fetch(`/api/sync?username=${encodeURIComponent(k)}`)
+                fetch(apiUrl('/api/sync', { username: k }))
                     .then(r => (r.ok ? r.json() : { resources: [] }))
                     .catch(() => ({ resources: [] }))
             ));
@@ -216,7 +321,7 @@
         fetch('/api/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name })
+            body: JSON.stringify({ name, event: EVENT.id })
         }).catch(() => {});
     }
 
@@ -243,9 +348,9 @@
         // Primera vez: pista sobre cómo debe ser el nombre
         usernameInput.addEventListener('focus', () => {
             try {
-                if (!localStorage.getItem('gymkana_boda_hint_seen')) {
+                if (!localStorage.getItem(eventPrefix() + 'hint_seen')) {
                     showToast('Pon un nombre identificativo: con él se reconocerán tus fotos', 4500);
-                    localStorage.setItem('gymkana_boda_hint_seen', '1');
+                    localStorage.setItem(eventPrefix() + 'hint_seen', '1');
                 }
             } catch (e) {}
         });
@@ -263,7 +368,7 @@
             // la misma persona antes de continuar, con un mensaje
             // integrado en la app (sin diálogos del navegador).
             try {
-                const [uRes, gRes] = await Promise.all([fetch('/api/users'), fetch('/api/gallery')]);
+                const [uRes, gRes] = await Promise.all([fetch(apiUrl('/api/users')), fetch(apiUrl('/api/gallery'))]);
                 const users = uRes.ok ? await uRes.json() : [];
                 const photos = gRes.ok ? await gRes.json() : [];
                 const taken = new Set();
@@ -283,18 +388,17 @@
             state.username = name;
             loadState();
             state.username = name;
-            try { localStorage.setItem(STORAGE_PREFIX + 'last_user', name); } catch (e) {}
+            try {
+                localStorage.setItem(lastUserKey(), name);
+                localStorage.setItem(STORAGE_PREFIX + 'last_user', name); // migración legacy
+                writeSession(name);
+            } catch (e) {}
             registerUser(name);
             await syncFromCloud();
             saveState();
             delete btnStart.dataset.busy;
             // Si ya tiene todos los retos hechos, directamente a la pantalla final
-            if (state.completedChallenges.length >= CHALLENGES.length) {
-                showCompleteScreen();
-                return;
-            }
-            renderCarousel();
-            navigateTo('challenges');
+            paintEntryScreen();
 
             // Mensaje "¿seguro que eres tú?" integrado en la aplicación
             function showNameConfirm(personName) {
@@ -339,7 +443,8 @@
         function logout() {
             saveState();
             // Sesión completamente limpia: nada del usuario anterior
-            // queda en memoria para la siguiente cuenta que entre.
+            // queda en memoria ni en la clave de sesión de esta boda.
+            clearSession();
             state = { username: null, completedChallenges: [], photos: {}, currentChallengeId: null };
             closeProfile();
             closeLeaderboard();
@@ -429,7 +534,16 @@
 
         $('#btn-remove').addEventListener('click', (e) => {
             e.stopPropagation();
-            resetUpload();
+            // Vuelve a la foto que ya estaba subida (si la hay) y
+            // abre el selector para elegir una nueva
+            selectedFile = null;
+            $('#file-input-gallery').value = '';
+            $('#file-input-camera').value = '';
+            const existing = state.photos[state.currentChallengeId];
+            if (existing && existing.url) showCurrentPhoto(thumbUrl(existing.url));
+            else resetUpload();
+            setSubmitLabel();
+            $('#photo-source-modal').classList.add('active');
         });
 
         $('#btn-submit').addEventListener('click', submitPhoto);
@@ -498,25 +612,83 @@
             if (e.target.id === 'photo-lightbox') closeLightbox();
         });
 
-        // Navegación del lightbox: botones, flechas del teclado y swipe
+        // Navegación del lightbox: botones y flechas del teclado
+        // (el swipe y el zoom se registran más abajo)
         $('#lightbox-prev').addEventListener('click', () => navLightbox(-1));
         $('#lightbox-next').addEventListener('click', () => navLightbox(1));
         document.addEventListener('keydown', (e) => {
             const lb = $('#photo-lightbox');
             if (!lb || !lb.classList.contains('active')) return;
-            if (e.key === 'ArrowLeft') { e.preventDefault(); navLightbox(-1); }
-            else if (e.key === 'ArrowRight') { e.preventDefault(); navLightbox(1); }
+            // Sin zoom: las flechas cambian de foto. Con zoom: se respetan
+            if (e.key === 'ArrowLeft' && zoom.scale <= 1) { e.preventDefault(); navLightbox(-1); }
+            else if (e.key === 'ArrowRight' && zoom.scale <= 1) { e.preventDefault(); navLightbox(1); }
         });
-        let lbTouchX = null;
-        $('#photo-lightbox').addEventListener('touchstart', (e) => {
-            lbTouchX = e.touches.length === 1 ? e.touches[0].clientX : null;
+
+        // ── ZOOM DEL LIGHTBOX ───────────────────────────────
+        // Pinch-to-zoom, rueda del ratón, doble clic y arrastre.
+        // Sin zoom (scale === 1) el gesto horizontal sigue siendo swipe.
+        const lbBox = $('#photo-lightbox');
+        const lbImg = $('#lightbox-img');
+
+        lbBox.addEventListener('wheel', (e) => {
+            if (!lbBox.classList.contains('active')) return;
+            e.preventDefault();
+            setZoom(zoom.scale * (e.deltaY < 0 ? 1.25 : 0.8), e.clientX, e.clientY);
+        }, { passive: false });
+
+        lbImg.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            setZoom(zoom.scale > 1.02 ? 1 : 2.5, e.clientX, e.clientY);
+        });
+
+        let pinchDist = 0;
+        let pinchScale = 1;
+        let lbTouch = null;
+        const touchDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+        const touchMid = (t) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
+
+        lbBox.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                pinchDist = touchDist(e.touches);
+                pinchScale = zoom.scale;
+                lbTouch = null;
+            } else if (e.touches.length === 1) {
+                lbTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY, ox: zoom.x, oy: zoom.y };
+            }
         }, { passive: true });
-        $('#photo-lightbox').addEventListener('touchend', (e) => {
-            if (lbTouchX == null) return;
-            const dx = e.changedTouches[0].clientX - lbTouchX;
-            lbTouchX = null;
-            if (Math.abs(dx) > 45) navLightbox(dx < 0 ? 1 : -1);
+
+        lbBox.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2 && pinchDist) {
+                e.preventDefault();
+                const m = touchMid(e.touches);
+                setZoom(pinchScale * (touchDist(e.touches) / pinchDist), m.x, m.y);
+            } else if (e.touches.length === 1 && zoom.scale > 1 && lbTouch) {
+                // Con zoom activo el dedo desplaza la foto en vez de navegar
+                e.preventDefault();
+                zoom.x = lbTouch.ox + (e.touches[0].clientX - lbTouch.x);
+                zoom.y = lbTouch.oy + (e.touches[0].clientY - lbTouch.y);
+                clampPan();
+                applyZoom(false);
+            }
+        }, { passive: false });
+
+        lbBox.addEventListener('touchend', (e) => {
+            if (e.touches.length < 2) pinchDist = 0;
+            if (e.touches.length !== 0) return;
+            if (zoom.scale <= 1.02) {
+                resetZoom(true);
+                // Swipe para cambiar de foto solo cuando NO hay zoom
+                if (lbTouch) {
+                    const dx = e.changedTouches[0].clientX - lbTouch.x;
+                    if (Math.abs(dx) > 45) navLightbox(dx < 0 ? 1 : -1);
+                }
+            } else {
+                clampPan();
+                applyZoom(true);
+            }
+            lbTouch = null;
         }, { passive: true });
+
         $('#btn-leaderboard').addEventListener('click', openLeaderboard);
         $('#leaderboard-close').addEventListener('click', closeLeaderboard);
         $('#leaderboard-overlay').addEventListener('click', (e) => {
@@ -708,8 +880,10 @@
                     behavior: 'smooth'
                 });
 
+                // Un reto ya completado se puede repetir: se abre para
+                // sustituir la foto (la clasificación cuenta retos distintos)
                 if (isCompleted) {
-                    showToast('Ya completaste este reto');
+                    openChallenge(challenge);
                     return;
                 }
                 if (!isCurrent) {
@@ -756,6 +930,12 @@
 
         resetUpload();
 
+        // Si ya hay foto en este reto se muestra como "foto actual":
+        // el invitado puede reemplazarla en cualquier momento.
+        const existing = state.photos[challenge.id];
+        if (existing && existing.url) showCurrentPhoto(thumbUrl(existing.url));
+        setSubmitLabel();
+
         const current = document.querySelector('.screen.active');
         const detail = screens['detail'];
 
@@ -794,16 +974,34 @@
             $('#preview-img').src = e.target.result;
             $('#upload-placeholder').style.display = 'none';
             $('#upload-preview').style.display = 'block';
+            $('#current-chip').hidden = true;
             $('#btn-submit').disabled = false;
         };
         reader.readAsDataURL(file);
         $('#photo-source-modal').classList.remove('active');
     }
 
+    // Muestra la foto ya subida a este reto (modo "reemplazar")
+    function showCurrentPhoto(url) {
+        $('#preview-img').src = url;
+        $('#upload-placeholder').style.display = 'none';
+        $('#upload-preview').style.display = 'block';
+        $('#current-chip').hidden = false;
+        $('#btn-submit').disabled = true;
+    }
+
+    function setSubmitLabel() {
+        const label = $('#btn-submit .btn-text');
+        if (!label) return;
+        const existing = state.photos[state.currentChallengeId];
+        label.textContent = existing ? 'Reemplazar foto' : 'Enviar foto';
+    }
+
     function resetUpload() {
         selectedFile = null;
         $('#file-input-gallery').value = '';
         $('#file-input-camera').value = '';
+        $('#current-chip').hidden = true;
         $('#upload-placeholder').style.display = 'flex';
         $('#upload-preview').style.display = 'none';
         const btn = $('#btn-submit');
@@ -815,13 +1013,15 @@
     // ── UPLOAD TO CLOUDINARY ─────────────────────────────────
     async function uploadToCloudinary(file, challengeId) {
         const { cloudName, uploadPreset } = CLOUDINARY_CONFIG;
-        const folderPath = `gymkana-boda/${normalizeName(state.username)}`;
+        const userKey = normalizeName(state.username);
+        // Carpeta y etiquetas aisladas por evento: cada boda tiene su mundo
+        const folderPath = `gymkana-boda/events/${EVENT.id}/${userKey}`;
         const formData = new FormData();
         formData.append('file', file);
         formData.append('upload_preset', uploadPreset);
         formData.append('folder', folderPath);
-        formData.append('tags', `gymkana,boda,${normalizeName(state.username)},reto_${challengeId}`);
-        formData.append('context', `user=${state.username}|challenge=${challengeId}`);
+        formData.append('tags', `gymkana,boda,evento_${EVENT.id},${userKey},reto_${challengeId}`);
+        formData.append('context', `user=${state.username}|challenge=${challengeId}|event=${EVENT.id}`);
 
         const response = await fetch(
             `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
@@ -852,10 +1052,13 @@
         if (!selectedFile || !state.currentChallengeId) return;
         const btn = $('#btn-submit');
         const challenge = CHALLENGES.find(c => c.id === state.currentChallengeId);
+        // ¿Es una repetición del reto? Entonces se sustituye, no se suma
+        const isReplace = state.completedChallenges.includes(challenge.id);
 
         btn.querySelector('.btn-text').style.display = 'none';
         btn.querySelector('.btn-loader').style.display = 'inline-flex';
         btn.disabled = true;
+        $('#upload-area').classList.add('is-uploading');
 
         try {
             let result;
@@ -866,12 +1069,20 @@
                 showToast('Foto guardada localmente (configura Cloudinary)', 3000);
             }
 
-            state.completedChallenges.push(challenge.id);
+            if (!isReplace) state.completedChallenges.push(challenge.id);
             state.photos[challenge.id] = { url: result.secure_url, fileName: challenge.filename };
             saveState();
 
+            $('#upload-area').classList.remove('is-uploading');
+
             // Aviso "reto completado" centrado en medio de la página
-            showDoneOverlay(challenge);
+            showDoneOverlay(challenge, isReplace);
+
+            if (isReplace) {
+                // Se vuelve a los retos sin avanzar: el progreso no cambia
+                setTimeout(() => { renderCarousel(); navigateTo('challenges'); }, 1700);
+                return;
+            }
 
             if (state.completedChallenges.length === CHALLENGES.length) {
                 // Tiempos ampliados: el aviso se desvanece (0,6 s) y la
@@ -885,6 +1096,7 @@
             }
         } catch (error) {
             console.error('Upload error:', error);
+            $('#upload-area').classList.remove('is-uploading');
             showToast(`Error: ${error.message}`, 3000);
             btn.querySelector('.btn-text').style.display = '';
             btn.querySelector('.btn-loader').style.display = 'none';
@@ -895,10 +1107,10 @@
     // ── AVISO "RETO COMPLETADO" — en medio de la página ─────
     let doneTimer = null;
 
-    function showDoneOverlay(challenge) {
+    function showDoneOverlay(challenge, replaced) {
         const ov = $('#done-overlay');
-        if (!ov) { showToast('Reto completado', 2000, 'success'); return; }
-        $('#done-title').textContent = '¡Reto completado!';
+        if (!ov) { showToast(replaced ? 'Foto actualizada' : 'Reto completado', 2000, 'success'); return; }
+        $('#done-title').textContent = replaced ? '¡Foto actualizada!' : '¡Reto completado!';
         // Sin emojis: solo el nombre del reto
         $('#done-sub').textContent = challenge ? challenge.title : '';
         // Reinicia la animación por si se envían dos fotos seguidas
@@ -1329,7 +1541,7 @@
         }
 
         try {
-            const res = await fetch('/api/gallery');
+            const res = await fetch(apiUrl('/api/gallery'));
             if (!res.ok) throw new Error('Error cargando la galería');
             const photos = await res.json();
             if (!Array.isArray(photos)) throw new Error('Respuesta no válida');
@@ -1417,6 +1629,57 @@
     let lbPhotos = [];
     let lbIndex = -1;
 
+    // ── ZOOM DEL LIGHTBOX (estado compartido) ──────────────
+    const zoom = { scale: 1, x: 0, y: 0 };
+    const ZOOM_MAX = 4;
+
+    function applyZoom(ease) {
+        const img = $('#lightbox-img');
+        const box = $('#photo-lightbox');
+        if (!img) return;
+        img.classList.toggle('zoom-ease', !!ease);
+        img.style.transform = `translate3d(${zoom.x}px, ${zoom.y}px, 0) scale(${zoom.scale})`;
+        if (box) box.classList.toggle('is-zoomed', zoom.scale > 1.02);
+        if (ease) setTimeout(() => img.classList.remove('zoom-ease'), 240);
+    }
+
+    function resetZoom(ease) {
+        zoom.scale = 1;
+        zoom.x = 0;
+        zoom.y = 0;
+        applyZoom(ease);
+    }
+
+    // La foto ampliada no puede arrastrarse fuera del encuadre
+    function clampPan() {
+        const img = $('#lightbox-img');
+        if (!img || zoom.scale <= 1) { zoom.x = 0; zoom.y = 0; return; }
+        const maxX = Math.max(0, (img.offsetWidth * zoom.scale - img.offsetWidth) / 2);
+        const maxY = Math.max(0, (img.offsetHeight * zoom.scale - img.offsetHeight) / 2);
+        zoom.x = Math.min(maxX, Math.max(-maxX, zoom.x));
+        zoom.y = Math.min(maxY, Math.max(-maxY, zoom.y));
+    }
+
+    // Amplía alrededor del punto (cx, cy) para que ese punto no se mueva
+    function setZoom(next, cx, cy) {
+        const box = $('#photo-lightbox');
+        if (!box) return;
+        const r = box.getBoundingClientRect();
+        const s0 = zoom.scale;
+        const s1 = Math.min(ZOOM_MAX, Math.max(1, next));
+        if (s1 === s0) return;
+        if (cx != null) {
+            const ux = (cx - (r.left + r.width / 2) - zoom.x) / s0;
+            const uy = (cy - (r.top + r.height / 2) - zoom.y) / s0;
+            zoom.x += (s0 - s1) * ux;
+            zoom.y += (s0 - s1) * uy;
+        }
+        if (s1 <= 1) { zoom.x = 0; zoom.y = 0; }
+        zoom.scale = s1;
+        clampPan();
+        applyZoom(Math.abs(s1 - s0) > 0.5);
+    }
+
     function openLightbox(photo, list, index) {
         if (!photo) return;
         if (Array.isArray(list) && list.length > 0) {
@@ -1435,6 +1698,7 @@
     function showLightboxPhoto() {
         const photo = lbPhotos[lbIndex];
         if (!photo) return;
+        resetZoom(false);
         const src = photo.url || photo.full;
         const challenge = CHALLENGES.find(c => c.id === photo.reto);
         const parts = [];
@@ -1460,6 +1724,7 @@
     function closeLightbox() {
         const box = $('#photo-lightbox');
         if (box) box.classList.remove('active');
+        resetZoom(false);
         lbPhotos = [];
         lbIndex = -1;
     }
@@ -1519,20 +1784,16 @@
         const cached = !!lbList;
         renderLeaderboard(!cached, false, false);
         try {
-            const [uRes, gRes] = await Promise.all([fetch('/api/users'), fetch('/api/gallery')]);
+            const [uRes, gRes] = await Promise.all([fetch(apiUrl('/api/users')), fetch(apiUrl('/api/gallery'))]);
             const users = uRes.ok ? await uRes.json() : [];
             const photos = gRes.ok ? await gRes.json() : [];
             lbList = buildRanking(
                 Array.isArray(users) ? users : [],
                 Array.isArray(photos) ? photos : []
             );
-            // La primera p?gina es la que contiene tu puesto
+            // Siempre se arranca en el Top 1: el salto a tu puesto se
+            // hace con el botón «Ir a mi posición».
             lbPage = 1;
-            if (state.username) {
-                const mine = normalizeName(state.username);
-                const idx = lbList.findIndex(e => normalizeName(e.name) === mine);
-                if (idx >= 0) lbPage = Math.floor(idx / LB_PAGE_SIZE) + 1;
-            }
             renderLeaderboard(false, false, !cached);
         } catch (e) {
             renderLeaderboard(false, true, false);
@@ -1545,6 +1806,9 @@
         let html = '';
         let subtitle = 'Quién va primero en la gincana';
         let pagerHtml = '';
+        let jumpHtml = '';
+        let myRank = 0;
+        let myPage = 1;
 
         if (loading) {
             html = '<p class="lb-loading">Cargando clasificación…</p>';
@@ -1558,8 +1822,8 @@
             if (lbPage < 1) lbPage = 1;
             const start = (lbPage - 1) * LB_PAGE_SIZE;
 
-            let myRank = 0;
             list.forEach((e, i) => { if (mine && normalizeName(e.name) === mine) myRank = i + 1; });
+            myPage = myRank ? Math.floor((myRank - 1) / LB_PAGE_SIZE) + 1 : 1;
 
             html = list.slice(start, start + LB_PAGE_SIZE).map((e, k) => {
                 const i = start + k;
@@ -1585,6 +1849,12 @@
                 `;
             }
 
+            // Acceso directo a tu puesto (la vista por defecto es el Top 1)
+            jumpHtml = myRank ? `
+                <button type="button" class="lb-jump${lbPage === myPage ? ' is-here' : ''}" data-jump="me">
+                    ${lbPage === myPage ? '★ Estás en tu puesto' : 'Ir a mi posición · ' + myRank + 'º'}
+                </button>` : '';
+
             subtitle = (mine && myRank)
                 ? `Tu puesto: ${myRank}º de ${list.length} · ${list.length} participantes`
                 : (mine
@@ -1595,7 +1865,9 @@
         ['lb-list-overlay', 'lb-list-complete'].forEach(id => {
             const el = document.getElementById(id);
             if (!el) return;
-            el.innerHTML = html + (pagerHtml ? `<div class="party-pager lb-pager">${pagerHtml}</div>` : '');
+            el.innerHTML = html
+                + (pagerHtml ? `<div class="party-pager lb-pager">${pagerHtml}</div>` : '')
+                + jumpHtml;
 
             // Entrada de las filas: una sola vez y con fundido suave
             if (animate && !loading && !error) {
@@ -1606,13 +1878,25 @@
                 el._lbAnimT = setTimeout(() => el.classList.remove('lb-animate'), 900);
             }
 
-            // Paginaci�n de la clasificaci�n
+            // Paginación de la clasificación
             el.querySelectorAll('.lb-pager .pager-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     lbPage += btn.dataset.dir === 'next' ? 1 : -1;
                     renderLeaderboard(false, false, true);
                 });
             });
+
+            // «Ir a mi posición»: salta a la página con tu fila y la centra
+            const jump = el.querySelector('.lb-jump[data-jump="me"]');
+            if (jump) jump.addEventListener('click', () => {
+                lbPage = myPage;
+                renderLeaderboard(false, false, true);
+                requestAnimationFrame(() => {
+                    const row = el.querySelector('.lb-row.me');
+                    if (row && row.scrollIntoView) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                });
+            });
+
             // Tocar una fila abre el perfil de esa persona
             el.querySelectorAll('.lb-row[data-name]').forEach(row => {
                 const open = () => openProfile(row.dataset.name);
@@ -1631,6 +1915,9 @@
     function openLeaderboard() {
         const ov = $('#leaderboard-overlay');
         if (!ov) return;
+        // La vista por defecto es el Top 1: el panel se reinicia arriba
+        const panel = ov.querySelector('.leaderboard-panel');
+        if (panel) panel.scrollTop = 0;
         ov.classList.add('active');
         loadLeaderboard();
     }
@@ -1667,7 +1954,7 @@
             // Reutiliza la galería ya cargada; si no, la trae ahora
             let photos = partyPhotos;
             if (!photos || photos.length === 0) {
-                const res = await fetch('/api/gallery');
+                const res = await fetch(apiUrl('/api/gallery'));
                 const data = res.ok ? await res.json() : [];
                 photos = Array.isArray(data) ? data : [];
                 partyPhotos = photos;

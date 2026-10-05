@@ -9,6 +9,9 @@
             ]
         }
     ],
+    "rewrites": [
+        { "source": "/boda/:slug", "destination": "/index.html" }
+    ],
     "headers": [
         {
             "source": "/manifest.webmanifest",

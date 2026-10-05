@@ -1,3 +1,13 @@
+const DEFAULT_EVENT = process.env.DEFAULT_EVENT || 'boda';
+
+// Los recursos sin etiqueta evento_* pertenecen al evento por defecto
+function belongsToEvent(tags, want) {
+    const event = want || DEFAULT_EVENT;
+    const list = Array.isArray(tags) ? tags : [];
+    const own = list.find(t => String(t).indexOf('evento_') === 0);
+    return own ? String(own).slice(7) === event : DEFAULT_EVENT === event;
+}
+
 module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -7,7 +17,7 @@ module.exports = async (req, res) => {
         return res.status(200).end();
     }
 
-    const { username } = req.query;
+    const { username, event } = req.query;
     if (!username) {
         return res.status(400).json({ error: 'username required' });
     }
@@ -22,7 +32,9 @@ module.exports = async (req, res) => {
 
     try {
         const auth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
-        const url = `https://api.cloudinary.com/v1_1/${cloudName}/resources/image/tags/${encodeURIComponent(username)}?max_results=100&fields=tags,display_name,secure_url,public_id`;
+        // tags=true y context=true son necesarios para saber a qué
+        // evento pertenece cada foto
+        const url = `https://api.cloudinary.com/v1_1/${cloudName}/resources/image/tags/${encodeURIComponent(username)}?max_results=100&tags=true&context=true`;
 
         const response = await fetch(url, {
             method: 'GET',
@@ -37,7 +49,9 @@ module.exports = async (req, res) => {
         }
 
         const data = await response.json();
-        return res.status(200).json(data);
+        const wanted = String(event || '').trim();
+        const resources = (data.resources || []).filter(r => belongsToEvent(r.tags, wanted));
+        return res.status(200).json(Object.assign({}, data, { resources }));
     } catch (e) {
         return res.status(500).json({ error: e.message });
     }

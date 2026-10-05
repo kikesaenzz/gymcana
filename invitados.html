@@ -67,6 +67,7 @@
 <main>
     <h1>📋 Invitados registrados</h1>
     <p class="muted">Gincana Fotográfica — quién se ha registrado y cuántas fotos ha subido.</p>
+    <p class="muted" id="event-label"></p>
 
     <div class="stats" id="stats"></div>
 
@@ -113,6 +114,15 @@
 
     let users = [];
     let photos = [];
+
+    // Invitados de UNA boda: /invitados.html?event=ana-y-carlos
+    // Sin parámetro se usa la última boda abierta en este dispositivo
+    const EVENT = new URLSearchParams(location.search).get('event')
+        || (() => { try { return localStorage.getItem('gymkana_boda_last_event') || 'boda'; } catch (e) { return 'boda'; } })();
+    const api = (p) => `${p}?event=${encodeURIComponent(EVENT)}`;
+
+    const label = $('#event-label');
+    if (label) label.textContent = `Evento: ${EVENT} · cambia el parámetro ?event= para ver otra boda`;
 
     function photoCounts() {
         const counts = {};
@@ -166,7 +176,7 @@
     async function load() {
         $('#tbody').innerHTML = '<tr><td colspan="4" class="empty">Cargando…</td></tr>';
         try {
-            const [uRes, pRes] = await Promise.all([fetch('/api/users'), fetch('/api/gallery')]);
+            const [uRes, pRes] = await Promise.all([fetch(api('/api/users')), fetch(api('/api/gallery'))]);
             users = uRes.ok ? await uRes.json() : [];
             photos = pRes.ok ? await pRes.json() : [];
             if (!Array.isArray(users)) users = [];
@@ -193,7 +203,7 @@
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = 'invitados-gincana.csv';
+        a.download = `invitados-gincana-${EVENT}.csv`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

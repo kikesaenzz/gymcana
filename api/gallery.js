@@ -1,12 +1,26 @@
 // ============================================================
 // GALERIA GLOBAL
-// Devuelve todas las fotos subidas (etiqueta "gymkana") con:
+// Devuelve todas las fotos subidas (etiqueta "gymkana") de UN
+// evento con:
 //  - url / thumb  (imagen original y miniatura)
 //  - user         (quien la subio, nombre original)
 //  - reto         (numero de reto)
+// El evento se pasa en ?event=<slug> y se filtra por la etiqueta
+// evento_<slug>. Las fotos antiguas (sin esa etiqueta) pertenecen
+// al evento por defecto.
 // El registro (1x1) NO lleva la etiqueta "gymkana", asi que
 // no aparece aqui.
 // ============================================================
+
+const DEFAULT_EVENT = process.env.DEFAULT_EVENT || 'boda';
+
+// Los recursos sin etiqueta evento_* pertenecen al evento por defecto
+function belongsToEvent(tags, want) {
+    const event = want || DEFAULT_EVENT;
+    const list = Array.isArray(tags) ? tags : [];
+    const own = list.find(t => String(t).indexOf('evento_') === 0);
+    return own ? String(own).slice(7) === event : DEFAULT_EVENT === event;
+}
 
 module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -29,6 +43,7 @@ module.exports = async (req, res) => {
 
     const auth = 'Basic ' + Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
     const url = `https://api.cloudinary.com/v1_1/${cloudName}/resources/image/tags/gymkana?max_results=500&context=true&tags=true`;
+    const event = String((req.query && req.query.event) || '').trim();
 
     try {
         const response = await fetch(url, { headers: { 'Authorization': auth } });
@@ -38,7 +53,9 @@ module.exports = async (req, res) => {
         }
         const data = await response.json();
 
-        const photos = (data.resources || []).map(r => {
+        const photos = (data.resources || [])
+            .filter(r => belongsToEvent(r.tags, event))
+            .map(r => {
             const ctx = parseContext(r.context);
             const tags = r.tags || [];
             const retoTag = tags.find(t => /^reto_\d+$/.test(t));

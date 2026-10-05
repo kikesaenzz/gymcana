@@ -1,12 +1,22 @@
 // ============================================================
 // REGISTRO DE INVITADOS
 // Crea un marcador por invitado en Cloudinary (una imagen de
-// 1x1 en gymkana-boda/registry/<nombre-normalizado>).
+// 1x1 en gymkana-boda/registry/<evento>/<nombre-normalizado>).
 // Un archivo por invitado = sin colisiones aunque dos personas
 // se registren a la vez. El nombre normalizado (minúsculas y
 // sin acentos) hace que "Ana", "ana" y "ANA" sean el mismo
-// invitado.
+// invitado. El evento (?event= en el body) aísla cada boda.
 // ============================================================
+
+const DEFAULT_EVENT = process.env.DEFAULT_EVENT || 'boda';
+
+function slugifyEvent(s) {
+    return String(s).trim().toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 60) || DEFAULT_EVENT;
+}
 
 module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -29,6 +39,7 @@ module.exports = async (req, res) => {
         return res.status(400).json({ error: 'nombre no valido' });
     }
     const key = normalize(name);
+    const event = slugifyEvent((body && body.event) || '');
 
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
     const apiKey = process.env.CLOUDINARY_API_KEY;
@@ -46,10 +57,10 @@ module.exports = async (req, res) => {
 
     const form = new FormData();
     form.append('file', new Blob([pixel], { type: 'image/png' }), 'registro.png');
-    form.append('public_id', `gymkana-boda/registry/${key}`);
+    form.append('public_id', `gymkana-boda/registry/${event}/${key}`);
     form.append('overwrite', 'false');
-    form.append('tags', 'registro,boda');
-    form.append('context', `user=${name}|key=${key}`);
+    form.append('tags', `registro,boda,evento_${event}`);
+    form.append('context', `user=${name}|key=${key}|event=${event}`);
 
     try {
         const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
