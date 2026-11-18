@@ -408,7 +408,7 @@ label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:5px;font-we
     <p class="modal-err" id="modal-error" style="display:none"></p>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-primary" onclick="createEvent()">Crear</button>
+      <button class="btn btn-primary" onclick="submitNewEvent()">Crear</button>
     </div>
   </div>
 </div>
@@ -601,7 +601,7 @@ function autoSlug() {
     document.getElementById('new-slug').value = slugify(names);
 }
 
-async function createEvent() {
+async function submitNewEvent() {
     const names = document.getElementById('new-names').value.trim();
     const date  = document.getElementById('new-date').value;
     const slug  = document.getElementById('new-slug').value.trim() || slugify(names);
