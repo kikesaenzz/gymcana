@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex, nofollow">
 <title>Admin · Gincana Boda</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -52,9 +53,33 @@ input::placeholder,textarea::placeholder{color:var(--muted)}
 textarea{resize:vertical;min-height:70px}
 select option{background:#1a1828;color:var(--text)}
 
-/* Calendario nativo */
-input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.7) sepia(1) saturate(2) hue-rotate(5deg);cursor:pointer;opacity:.7}
-input[type=date]::-webkit-calendar-picker-indicator:hover{opacity:1}
+/* Flatpickr glassmorphism override */
+.flatpickr-calendar{
+  background:rgba(14,13,24,.97)!important;
+  border:1px solid var(--border-strong)!important;
+  backdrop-filter:var(--blur)!important;
+  box-shadow:0 20px 60px rgba(0,0,0,.65)!important;
+  border-radius:14px!important;
+  font-family:'DM Sans',sans-serif!important;
+  color:var(--text)!important;
+}
+.flatpickr-months .flatpickr-month,
+.flatpickr-weekdays,
+span.flatpickr-weekday{background:transparent!important;color:var(--muted)!important;fill:var(--muted)!important}
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month input.cur-year{background:transparent!important;color:var(--text)!important;font-family:'DM Sans',sans-serif!important}
+.flatpickr-day{color:var(--text)!important;border-radius:8px!important}
+.flatpickr-day:hover,.flatpickr-day.prevMonthDay:hover,.flatpickr-day.nextMonthDay:hover{background:var(--glass-hover)!important;border-color:transparent!important}
+.flatpickr-day.selected,.flatpickr-day.selected:hover{background:var(--accent)!important;border-color:var(--accent)!important;color:#fff!important}
+.flatpickr-day.today{border-color:var(--accent)!important}
+.flatpickr-day.today:hover{background:var(--glass-hover)!important}
+.flatpickr-day.prevMonthDay,.flatpickr-day.nextMonthDay{color:rgba(255,255,255,.25)!important}
+.flatpickr-months .flatpickr-prev-month,.flatpickr-months .flatpickr-next-month{fill:var(--muted)!important}
+.flatpickr-months .flatpickr-prev-month:hover,.flatpickr-months .flatpickr-next-month:hover{fill:var(--text)!important}
+.flatpickr-calendar.arrowTop::before,.flatpickr-calendar.arrowTop::after{display:none}
+.numInputWrapper:hover{background:var(--glass)!important}
+.numInputWrapper span{border-color:var(--border)!important}
+.numInputWrapper span svg path{fill:var(--muted)!important}
 
 label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.05em}
 .field{margin-bottom:16px}
@@ -180,9 +205,10 @@ label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:5px;font-we
 
 /* Modal */
 #modal{display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center}
-.modal-overlay{position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
+.modal-overlay{position:absolute;inset:0;z-index:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
 .modal-box{
   position:relative;
+  z-index:1;
   background:rgba(16,15,28,.92);
   border:1px solid var(--border-strong);
   border-radius:16px;
@@ -193,6 +219,7 @@ label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:5px;font-we
 }
 .modal-box h2{font-size:1.3rem;margin-bottom:20px}
 .modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:22px}
+.modal-err{color:#ff8080;font-size:.85rem;margin-top:12px;min-height:0;padding:0}
 
 .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);backdrop-filter:blur(12px);color:#fff;padding:11px 22px;border-radius:40px;font-size:.9rem;z-index:999;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;border:1px solid rgba(255,255,255,.12);box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .toast.show{opacity:1}
@@ -267,7 +294,7 @@ label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:5px;font-we
       <!-- TAB: INFO -->
       <div class="tab-pane active" id="tab-info">
         <div class="field"><label>Nombres de los novios</label><input id="f-names" placeholder="Ana y Carlos"></div>
-        <div class="field"><label>Fecha del evento</label><input id="f-date" type="date"></div>
+        <div class="field"><label>Fecha del evento</label><input id="f-date" type="text" placeholder="AAAA-MM-DD"></div>
         <div class="field"><label>Slug (URL del evento)</label><input id="f-slug" placeholder="ana-y-carlos" readonly style="color:var(--muted)"></div>
         <div class="field"><label>Mensaje de bienvenida</label><textarea id="f-welcome" placeholder="¡Bienvenidos a nuestra boda! Haced fotos y pasadlo genial." rows="3"></textarea></div>
         <div class="field"><label>Notas del admin (privadas)</label><textarea id="f-notes" rows="2"></textarea></div>
@@ -376,8 +403,9 @@ label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:5px;font-we
   <div class="modal-box">
     <h2>Nueva boda</h2>
     <div class="field"><label>Nombres de los novios *</label><input id="new-names" placeholder="Ana y Carlos" oninput="autoSlug()"></div>
-    <div class="field"><label>Fecha del evento</label><input id="new-date" type="date"></div>
+    <div class="field"><label>Fecha del evento</label><input id="new-date" type="text" placeholder="AAAA-MM-DD"></div>
     <div class="field"><label>Slug (identificador URL)</label><input id="new-slug" placeholder="ana-y-carlos"></div>
+    <p class="modal-err" id="modal-error" style="display:none"></p>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="createEvent()">Crear</button>
@@ -409,6 +437,7 @@ document.getElementById('admin-key-input').addEventListener('keydown', e => { if
 
 function logout() {
     adminKey = '';
+    sessionStorage.removeItem('adminKey');
     document.getElementById('screen-login').style.display = 'flex';
     document.getElementById('screen-dashboard').style.display = 'none';
 }
@@ -433,6 +462,7 @@ async function loadEvents() {
     }
     events = await res.json();
     document.getElementById('login-error').textContent = '';
+    sessionStorage.setItem('adminKey', adminKey);
     document.getElementById('screen-login').style.display = 'none';
     document.getElementById('screen-dashboard').style.display = 'flex';
     renderEvents();
@@ -468,7 +498,9 @@ async function openPanel(slug) {
 
     document.getElementById('panel-title').textContent = currentEvent.names || currentEvent.slug;
     document.getElementById('f-names').value  = currentEvent.names || '';
-    document.getElementById('f-date').value   = currentEvent.date || '';
+    const fpDate = document.getElementById('f-date')._flatpickr;
+    if (fpDate) fpDate.setDate(currentEvent.date || '', false);
+    else document.getElementById('f-date').value = currentEvent.date || '';
     document.getElementById('f-slug').value   = currentEvent.slug;
     document.getElementById('f-welcome').value = currentEvent.welcomeMessage || '';
     document.getElementById('f-notes').value  = currentEvent.adminNotes || '';
@@ -552,8 +584,10 @@ async function deleteEvent() {
 // ── NUEVA BODA ────────────────────────────────────────────────────────
 function openNewModal() {
     document.getElementById('new-names').value = '';
-    document.getElementById('new-date').value  = '';
-    document.getElementById('new-slug').value  = '';
+    const fpNew = document.getElementById('new-date')._flatpickr;
+    if (fpNew) fpNew.clear(); else document.getElementById('new-date').value = '';
+    document.getElementById('new-slug').value = '';
+    showModalError('');
     document.getElementById('modal').style.display = 'flex';
     setTimeout(() => document.getElementById('new-names').focus(), 50);
 }
@@ -571,13 +605,16 @@ async function createEvent() {
     const names = document.getElementById('new-names').value.trim();
     const date  = document.getElementById('new-date').value;
     const slug  = document.getElementById('new-slug').value.trim() || slugify(names);
-    if (!names && !slug) { showToast('Escribe los nombres primero', 'error'); return; }
+    if (!names && !slug) { showModalError('Escribe los nombres primero'); return; }
+    const btn = document.querySelector('#modal .btn-primary');
+    btn.disabled = true; btn.textContent = 'Creando…';
+    showModalError('');
     try {
         const res = await apiFetch('/api/admin', { method: 'POST', body: JSON.stringify({ names, date, slug }) });
-        if (res.status === 409) { showToast('Ese slug ya existe', 'error'); return; }
+        if (res.status === 409) { showModalError('Ese slug ya existe'); return; }
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
-            showToast('Error: ' + (err.error || res.status), 'error'); return;
+            showModalError('Error: ' + (err.error || res.status)); return;
         }
         const created = await res.json();
         events.push({ slug: created.slug, names: created.names, date: created.date, published: false, createdAt: created.createdAt });
@@ -586,8 +623,16 @@ async function createEvent() {
         showToast('Boda creada');
         openPanel(created.slug);
     } catch (e) {
-        showToast('Error de red: ' + e.message, 'error');
+        showModalError('Error de red: ' + e.message);
+    } finally {
+        btn.disabled = false; btn.textContent = 'Crear';
     }
+}
+
+function showModalError(msg) {
+    const el = document.getElementById('modal-error');
+    if (msg) { el.textContent = msg; el.style.display = 'block'; }
+    else { el.textContent = ''; el.style.display = 'none'; }
 }
 
 // ── DISEÑO ────────────────────────────────────────────────────────────
@@ -710,6 +755,11 @@ function showToast(msg, type) {
 // ── INIT ──────────────────────────────────────────────────────────────
 const saved = sessionStorage.getItem('adminKey');
 if (saved) { adminKey = saved; loadEvents(); }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script>
+flatpickr('#new-date', { dateFormat: 'Y-m-d', disableMobile: true, allowInput: true });
+flatpickr('#f-date',   { dateFormat: 'Y-m-d', disableMobile: true, allowInput: true });
 </script>
 </body>
 </html>
