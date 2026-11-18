@@ -10,7 +10,9 @@
         }
     ],
     "rewrites": [
-        { "source": "/boda/:slug", "destination": "/index.html" }
+        { "source": "/boda/:slug", "destination": "/index.html" },
+        { "source": "/admin", "destination": "/admin.html" },
+        { "source": "/setup", "destination": "/setup.html" }
     ],
     "headers": [
         {

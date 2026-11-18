@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin · Gincana Boda</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0f0f1a;--surface:#1a1a2e;--surface2:#222236;--border:rgba(255,255,255,.1);--text:#eee;--muted:rgba(255,255,255,.5);--accent:#b8956a;--danger:#e05c5c;--success:#5cb85c;--radius:12px}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh}
+h1,h2,h3{font-family:'Playfair Display',serif;font-weight:500}
+a{color:var(--accent);text-decoration:none}
+input,textarea,select{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:'DM Sans',sans-serif;font-size:.93rem;width:100%;outline:none;transition:border .15s}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:70px}
+label{display:block;font-size:.82rem;color:var(--muted);margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.04em}
+.field{margin-bottom:16px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:8px;border:none;font-family:'DM Sans',sans-serif;font-size:.93rem;font-weight:500;cursor:pointer;transition:filter .15s}
+.btn:hover{filter:brightness(1.1)}
+.btn-primary{background:var(--accent);color:#0f0f1a}
+.btn-secondary{background:rgba(255,255,255,.08);color:var(--text);border:1px solid var(--border)}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-sm{padding:6px 12px;font-size:.85rem}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* Layout */
+#screen-login{display:flex;align-items:center;justify-content:center;min-height:100vh}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:40px 36px;width:min(360px,90vw);text-align:center}
+.login-box h1{font-size:1.6rem;margin-bottom:8px}
+.login-box p{color:var(--muted);font-size:.9rem;margin-bottom:28px}
+.login-box input{margin-bottom:14px;text-align:center}
+.login-box .btn{width:100%;justify-content:center}
+.login-error{color:var(--danger);font-size:.85rem;margin-top:10px;min-height:20px}
+
+#screen-dashboard{display:none;flex-direction:column;min-height:100vh}
+.top-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.top-bar h1{font-size:1.3rem}
+.top-bar-actions{display:flex;gap:8px}
+.dashboard-body{padding:24px;max-width:900px;margin:0 auto;width:100%;flex:1}
+
+.events-grid{display:grid;gap:14px;margin-top:20px}
+.event-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:14px;cursor:pointer;transition:border-color .15s}
+.event-card:hover{border-color:var(--accent)}
+.event-card-info h3{font-size:1.05rem;font-family:'Playfair Display',serif;font-weight:500}
+.event-card-info .meta{font-size:.82rem;color:var(--muted);margin-top:3px}
+.event-card-actions{display:flex;gap:8px;flex-shrink:0}
+.badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:.77rem;font-weight:500}
+.badge-draft{background:rgba(255,255,255,.08);color:var(--muted)}
+.badge-pub{background:rgba(92,184,92,.15);color:var(--success)}
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
+
+/* Panel lateral */
+#event-panel{display:none;position:fixed;inset:0;z-index:100}
+.panel-overlay{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.panel-drawer{position:absolute;right:0;top:0;bottom:0;width:min(640px,100vw);background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.panel-header{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.panel-header h2{font-size:1.2rem}
+.panel-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.3rem;padding:4px 8px;border-radius:6px}
+.panel-close:hover{color:var(--text)}
+.panel-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.panel-tab{padding:12px 20px;font-size:.88rem;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;transition:color .15s}
+.panel-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.panel-body{flex:1;overflow-y:auto;padding:24px}
+.panel-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0}
+.tab-pane{display:none}
+.tab-pane.active{display:block}
+
+/* Links area */
+.links-box{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-top:8px}
+.link-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.link-row:last-child{margin-bottom:0}
+.link-row input{flex:1;font-size:.8rem;background:transparent;border-color:transparent;color:var(--muted);padding:4px 6px;cursor:text}
+.link-row input:focus{border-color:var(--border)}
+.link-label{font-size:.75rem;color:var(--muted);min-width:70px;text-align:right}
+
+/* Challenge editor */
+.challenge-item{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px}
+.challenge-item-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.challenge-num{font-size:.75rem;color:var(--muted);min-width:22px}
+.challenge-emoji-input{width:52px!important;text-align:center;font-size:1.3rem;padding:6px}
+.challenge-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.challenge-tip{font-size:.85rem}
+.challenge-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:8px}
+.add-challenge-btn{width:100%;margin-top:6px;justify-content:center;border-style:dashed}
+
+/* Modal */
+#modal{display:none;position:fixed;inset:0;z-index:200;align-items:center;justify-content:center}
+.modal-overlay{position:absolute;inset:0;background:rgba(0,0,0,.65)}
+.modal-box{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:30px 28px;width:min(440px,90vw)}
+.modal-box h2{font-size:1.3rem;margin-bottom:20px}
+.modal-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:22px}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:8px;font-size:.9rem;z-index:999;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.color-row{display:flex;align-items:center;gap:10px}
+.color-row input[type=color]{width:44px;height:38px;padding:2px;border-radius:6px;cursor:pointer}
+.color-row input[type=text]{flex:1}
+.swatches{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:border-color .15s}
+.swatch:hover,.swatch.selected{border-color:#fff}
+.bg-presets{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
+.bg-preset{border-radius:8px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color .15s;aspect-ratio:9/5}
+.bg-preset img{width:100%;height:100%;object-fit:cover}
+.bg-preset.selected{border-color:var(--accent)}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="screen-login">
+  <div class="login-box">
+    <h1>Gincana Boda</h1>
+    <p>Panel de administración</p>
+    <input type="password" id="admin-key-input" placeholder="Clave de admin" autocomplete="current-password">
+    <button class="btn btn-primary" onclick="login()">Entrar</button>
+    <p class="login-error" id="login-error"></p>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="screen-dashboard">
+  <div class="top-bar">
+    <h1>Gincana Boda · Admin</h1>
+    <div class="top-bar-actions">
+      <button class="btn btn-primary btn-sm" onclick="openNewModal()">+ Nueva boda</button>
+      <button class="btn btn-secondary btn-sm" onclick="logout()">Salir</button>
+    </div>
+  </div>
+  <div class="dashboard-body">
+    <p style="color:var(--muted);font-size:.9rem">Gestiona los eventos activos. Haz clic en una boda para editar su configuración.</p>
+    <div class="events-grid" id="events-grid">
+      <div class="empty-state">Cargando…</div>
+    </div>
+  </div>
+</div>
+
+<!-- PANEL LATERAL (editor de evento) -->
+<div id="event-panel">
+  <div class="panel-overlay" onclick="closePanel()"></div>
+  <div class="panel-drawer">
+    <div class="panel-header">
+      <h2 id="panel-title">Editar boda</h2>
+      <button class="panel-close" onclick="closePanel()">✕</button>
+    </div>
+    <div class="panel-tabs">
+      <div class="panel-tab active" onclick="switchTab('info')">Info</div>
+      <div class="panel-tab" onclick="switchTab('design')">Diseño</div>
+      <div class="panel-tab" onclick="switchTab('challenges')">Retos</div>
+      <div class="panel-tab" onclick="switchTab('links')">Enlaces</div>
+    </div>
+    <div class="panel-body">
+
+      <!-- TAB: INFO -->
+      <div class="tab-pane active" id="tab-info">
+        <div class="field"><label>Nombres de los novios</label><input id="f-names" placeholder="Ana y Carlos"></div>
+        <div class="field"><label>Fecha del evento</label><input id="f-date" type="date"></div>
+        <div class="field"><label>Slug (URL del evento)</label><input id="f-slug" placeholder="ana-y-carlos" readonly style="color:var(--muted)"></div>
+        <div class="field"><label>Mensaje de bienvenida</label><textarea id="f-welcome" placeholder="¡Bienvenidos a nuestra boda! Haced fotos y pasadlo genial." rows="3"></textarea></div>
+        <div class="field"><label>Notas del admin (privadas)</label><textarea id="f-notes" rows="2"></textarea></div>
+        <div class="field" style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--surface2);border-radius:var(--radius)">
+          <input type="checkbox" id="f-published" style="width:auto">
+          <label for="f-published" style="margin:0;text-transform:none;font-size:.9rem;cursor:pointer">Publicado (visible para los invitados)</label>
+        </div>
+      </div>
+
+      <!-- TAB: DISEÑO -->
+      <div class="tab-pane" id="tab-design">
+        <div class="field">
+          <label>Color principal (accent)</label>
+          <div class="color-row">
+            <input type="color" id="f-accent-picker" oninput="syncColor(this.value)">
+            <input type="text" id="f-accent" placeholder="#f2a4ba" oninput="syncColorPicker(this.value)">
+          </div>
+          <div class="swatches" id="swatches"></div>
+        </div>
+        <div class="field">
+          <label>Tipografía del título</label>
+          <select id="f-font">
+            <option value="Bodoni Moda">Bodoni Moda (elegante)</option>
+            <option value="Playfair Display">Playfair Display (romántica)</option>
+            <option value="Cormorant Garamond">Cormorant Garamond (lujosa)</option>
+            <option value="Dancing Script">Dancing Script (cursiva)</option>
+            <option value="DM Sans">DM Sans (moderna sin serifa)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Fondo del evento (preset)</label>
+          <div class="bg-presets" id="bg-presets">
+            <div class="bg-preset" data-preset="fondo1" onclick="selectBg('fondo1')"><img src="fondo1.jpg" alt="Fondo 1"></div>
+            <div class="bg-preset" data-preset="fondo2" onclick="selectBg('fondo2')"><img src="fondo2.jpg" alt="Fondo 2"></div>
+            <div class="bg-preset" data-preset="fondo3" onclick="selectBg('fondo3')"><img src="fondo3.jpg" alt="Fondo 3"></div>
+            <div class="bg-preset" data-preset="fondo4" onclick="selectBg('fondo4')"><img src="fondo4.jpg" alt="Fondo 4"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: RETOS -->
+      <div class="tab-pane" id="tab-challenges">
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:14px">Edita el título, descripción y emoji de cada reto. Los cambios se guardan al pulsar Guardar.</p>
+        <div id="challenges-editor"></div>
+        <button class="btn btn-secondary add-challenge-btn" onclick="addChallenge()">+ Añadir reto</button>
+      </div>
+
+      <!-- TAB: ENLACES -->
+      <div class="tab-pane" id="tab-links">
+        <p style="font-size:.85rem;color:var(--muted);margin-bottom:14px">Comparte estos enlaces con los novios y sus invitados.</p>
+        <div class="field">
+          <label>URL de la gincana (invitados)</label>
+          <div class="links-box">
+            <div class="link-row">
+              <span class="link-label">Web</span>
+              <input type="text" id="link-event" readonly onclick="this.select()">
+              <button class="btn btn-secondary btn-sm" onclick="copyLink('link-event')">Copiar</button>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label>URL del panel de personalización (novios)</label>
+          <div class="links-box">
+            <div class="link-row">
+              <span class="link-label">Setup</span>
+              <input type="text" id="link-setup" readonly onclick="this.select()">
+              <button class="btn btn-secondary btn-sm" onclick="copyLink('link-setup')">Copiar</button>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Clave del cliente</label>
+          <div class="links-box">
+            <div class="link-row">
+              <input type="text" id="link-clientkey" readonly onclick="this.select()">
+              <button class="btn btn-secondary btn-sm" onclick="copyLink('link-clientkey')">Copiar</button>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Lista de invitados (admin)</label>
+          <div class="links-box">
+            <div class="link-row">
+              <span class="link-label">Admin</span>
+              <input type="text" id="link-guests" readonly onclick="this.select()">
+              <button class="btn btn-secondary btn-sm" onclick="copyLink('link-guests')">Copiar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /panel-body -->
+    <div class="panel-footer">
+      <button class="btn btn-danger btn-sm" onclick="deleteEvent()">Eliminar</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="closePanel()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveEvent()">Guardar</button>
+      </div>
+    </div>
+  </div><!-- /panel-drawer -->
+</div>
+
+<!-- MODAL NUEVA BODA -->
+<div id="modal">
+  <div class="modal-overlay" onclick="closeModal()"></div>
+  <div class="modal-box">
+    <h2>Nueva boda</h2>
+    <div class="field"><label>Nombres de los novios *</label><input id="new-names" placeholder="Ana y Carlos" oninput="autoSlug()"></div>
+    <div class="field"><label>Fecha del evento</label><input id="new-date" type="date"></div>
+    <div class="field"><label>Slug (identificador URL)</label><input id="new-slug" placeholder="ana-y-carlos"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="createEvent()">Crear</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const BASE = '';
+let adminKey = '';
+let events = [];
+let currentEvent = null;
+let currentChallenges = [];
+let currentBg = 'fondo2';
+
+const ACCENT_SWATCHES = ['#f2a4ba','#b8956a','#a8d8b9','#9bb5d9','#c9a7e8','#e8c07d','#e07d7d','#7dbde8'];
+
+// ── AUTH ──────────────────────────────────────────────────────────────
+function login() {
+    const k = document.getElementById('admin-key-input').value.trim();
+    if (!k) return;
+    adminKey = k;
+    loadEvents();
+}
+
+document.getElementById('admin-key-input').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+function logout() {
+    adminKey = '';
+    document.getElementById('screen-login').style.display = 'flex';
+    document.getElementById('screen-dashboard').style.display = 'none';
+}
+
+async function apiFetch(path, opts = {}) {
+    const url = BASE + path;
+    const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminKey}`, ...(opts.headers || {}) };
+    const res = await fetch(url, { ...opts, headers });
+    return res;
+}
+
+// ── EVENTS LIST ───────────────────────────────────────────────────────
+async function loadEvents() {
+    const res = await apiFetch('/api/admin?action=list');
+    if (res.status === 401) {
+        document.getElementById('login-error').textContent = 'Clave incorrecta.';
+        return;
+    }
+    if (!res.ok) {
+        document.getElementById('login-error').textContent = 'Error de servidor. Revisa que Vercel KV esté configurado.';
+        return;
+    }
+    events = await res.json();
+    document.getElementById('login-error').textContent = '';
+    document.getElementById('screen-login').style.display = 'none';
+    document.getElementById('screen-dashboard').style.display = 'flex';
+    renderEvents();
+}
+
+function renderEvents() {
+    const grid = document.getElementById('events-grid');
+    if (!events.length) {
+        grid.innerHTML = '<div class="empty-state">Todavía no hay bodas. Crea la primera con el botón de arriba.</div>';
+        return;
+    }
+    events.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    grid.innerHTML = events.map(e => `
+        <div class="event-card" onclick="openPanel('${e.slug}')">
+            <div class="event-card-info">
+                <h3>${esc(e.names || e.slug)}</h3>
+                <div class="meta">${e.date ? fmtDate(e.date) : 'Sin fecha'} · /${e.slug}</div>
+            </div>
+            <div class="event-card-actions">
+                <span class="badge ${e.published ? 'badge-pub' : 'badge-draft'}">${e.published ? 'Publicado' : 'Borrador'}</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ── PANEL EDITOR ──────────────────────────────────────────────────────
+async function openPanel(slug) {
+    const res = await apiFetch(`/api/admin?action=get&event=${encodeURIComponent(slug)}`);
+    if (!res.ok) { showToast('Error cargando el evento'); return; }
+    currentEvent = await res.json();
+    currentChallenges = JSON.parse(JSON.stringify(currentEvent.challenges || []));
+    currentBg = currentEvent.bgPreset || 'fondo2';
+
+    document.getElementById('panel-title').textContent = currentEvent.names || currentEvent.slug;
+    document.getElementById('f-names').value  = currentEvent.names || '';
+    document.getElementById('f-date').value   = currentEvent.date || '';
+    document.getElementById('f-slug').value   = currentEvent.slug;
+    document.getElementById('f-welcome').value = currentEvent.welcomeMessage || '';
+    document.getElementById('f-notes').value  = currentEvent.adminNotes || '';
+    document.getElementById('f-published').checked = !!currentEvent.published;
+    document.getElementById('f-accent').value = currentEvent.accentColor || '#f2a4ba';
+    document.getElementById('f-accent-picker').value = currentEvent.accentColor || '#f2a4ba';
+    document.getElementById('f-font').value   = currentEvent.fontHeading || 'Bodoni Moda';
+
+    renderSwatches(currentEvent.accentColor || '#f2a4ba');
+    renderBgPresets(currentBg);
+    renderChallenges();
+    populateLinks(currentEvent);
+    switchTab('info');
+    document.getElementById('event-panel').style.display = 'block';
+}
+
+function closePanel() {
+    document.getElementById('event-panel').style.display = 'none';
+    currentEvent = null;
+}
+
+function switchTab(name) {
+    document.querySelectorAll('.panel-tab').forEach((t, i) => {
+        const names = ['info','design','challenges','links'];
+        t.classList.toggle('active', names[i] === name);
+    });
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+}
+
+function populateLinks(e) {
+    const base = window.location.origin;
+    document.getElementById('link-event').value    = `${base}/boda/${e.slug}`;
+    document.getElementById('link-setup').value    = `${base}/setup?event=${e.slug}&key=${e.clientKey}`;
+    document.getElementById('link-clientkey').value = e.clientKey || '';
+    document.getElementById('link-guests').value   = `${base}/invitados.html?event=${e.slug}`;
+}
+
+function copyLink(id) {
+    const el = document.getElementById(id);
+    navigator.clipboard.writeText(el.value).then(() => showToast('Copiado al portapapeles'));
+}
+
+// ── SAVE / DELETE ─────────────────────────────────────────────────────
+async function saveEvent() {
+    if (!currentEvent) return;
+    const payload = {
+        slug: currentEvent.slug,
+        names: document.getElementById('f-names').value.trim(),
+        date: document.getElementById('f-date').value,
+        welcomeMessage: document.getElementById('f-welcome').value.trim(),
+        adminNotes: document.getElementById('f-notes').value.trim(),
+        published: document.getElementById('f-published').checked,
+        accentColor: document.getElementById('f-accent').value.trim() || '#f2a4ba',
+        fontHeading: document.getElementById('f-font').value,
+        bgPreset: currentBg,
+        bgImage: currentEvent.bgImage || null,
+        logo: currentEvent.logo || null,
+        challenges: currentChallenges,
+    };
+    const res = await apiFetch('/api/admin', { method: 'PUT', body: JSON.stringify(payload) });
+    if (!res.ok) { showToast('Error guardando', 'error'); return; }
+    const updated = await res.json();
+    events = events.map(e => e.slug === updated.slug ? { ...e, ...updated } : e);
+    renderEvents();
+    closePanel();
+    showToast('Guardado correctamente');
+}
+
+async function deleteEvent() {
+    if (!currentEvent) return;
+    if (!confirm(`¿Eliminar la boda "${currentEvent.names}"? Esta acción no se puede deshacer.`)) return;
+    const res = await apiFetch(`/api/admin?action=delete&event=${encodeURIComponent(currentEvent.slug)}`, { method: 'DELETE' });
+    if (!res.ok) { showToast('Error eliminando', 'error'); return; }
+    events = events.filter(e => e.slug !== currentEvent.slug);
+    renderEvents();
+    closePanel();
+    showToast('Boda eliminada');
+}
+
+// ── NUEVA BODA ────────────────────────────────────────────────────────
+function openNewModal() {
+    document.getElementById('new-names').value = '';
+    document.getElementById('new-date').value  = '';
+    document.getElementById('new-slug').value  = '';
+    document.getElementById('modal').style.display = 'flex';
+    setTimeout(() => document.getElementById('new-names').focus(), 50);
+}
+
+function closeModal() {
+    document.getElementById('modal').style.display = 'none';
+}
+
+function autoSlug() {
+    const names = document.getElementById('new-names').value;
+    document.getElementById('new-slug').value = slugify(names);
+}
+
+async function createEvent() {
+    const names = document.getElementById('new-names').value.trim();
+    const date  = document.getElementById('new-date').value;
+    const slug  = document.getElementById('new-slug').value.trim() || slugify(names);
+    if (!names && !slug) { showToast('Escribe los nombres primero', 'error'); return; }
+    const res = await apiFetch('/api/admin', { method: 'POST', body: JSON.stringify({ names, date, slug }) });
+    if (res.status === 409) { showToast('Ese slug ya existe', 'error'); return; }
+    if (!res.ok) { showToast('Error creando el evento', 'error'); return; }
+    const created = await res.json();
+    events.push({ slug: created.slug, names: created.names, date: created.date, published: false, createdAt: created.createdAt });
+    renderEvents();
+    closeModal();
+    showToast('Boda creada');
+    openPanel(created.slug);
+}
+
+// ── DISEÑO ────────────────────────────────────────────────────────────
+function renderSwatches(active) {
+    document.getElementById('swatches').innerHTML = ACCENT_SWATCHES.map(c =>
+        `<div class="swatch ${c === active ? 'selected' : ''}" style="background:${c}" onclick="pickSwatch('${c}')"></div>`
+    ).join('');
+}
+
+function pickSwatch(c) {
+    document.getElementById('f-accent').value = c;
+    document.getElementById('f-accent-picker').value = c;
+    renderSwatches(c);
+}
+
+function syncColor(v) {
+    document.getElementById('f-accent').value = v;
+    renderSwatches(v);
+}
+
+function syncColorPicker(v) {
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) document.getElementById('f-accent-picker').value = v;
+    renderSwatches(v);
+}
+
+function renderBgPresets(active) {
+    document.querySelectorAll('.bg-preset').forEach(el => {
+        el.classList.toggle('selected', el.dataset.preset === active);
+    });
+}
+
+function selectBg(preset) {
+    currentBg = preset;
+    renderBgPresets(preset);
+}
+
+// ── RETOS ─────────────────────────────────────────────────────────────
+function renderChallenges() {
+    const container = document.getElementById('challenges-editor');
+    container.innerHTML = currentChallenges.map((c, i) => `
+        <div class="challenge-item" id="ci-${i}">
+            <div class="challenge-item-header">
+                <span class="challenge-num">#${i + 1}</span>
+                <input class="challenge-emoji-input" value="${esc(c.emoji)}" oninput="updateChallenge(${i},'emoji',this.value)" maxlength="4">
+                <input style="flex:1" value="${esc(c.title)}" oninput="updateChallenge(${i},'title',this.value)" placeholder="Título">
+            </div>
+            <div class="field" style="margin-bottom:8px">
+                <textarea rows="2" oninput="updateChallenge(${i},'description',this.value)">${esc(c.description)}</textarea>
+            </div>
+            <div class="field challenge-tip" style="margin-bottom:0">
+                <label>Consejos (uno por línea)</label>
+                <textarea rows="2" oninput="updateChallenge(${i},'tips',this.value)">${(c.tips||[]).join('\n')}</textarea>
+            </div>
+            <div class="challenge-actions">
+                ${i > 0 ? `<button class="btn btn-secondary btn-sm" onclick="moveChallenge(${i},-1)">↑</button>` : ''}
+                ${i < currentChallenges.length - 1 ? `<button class="btn btn-secondary btn-sm" onclick="moveChallenge(${i},1)">↓</button>` : ''}
+                <button class="btn btn-secondary btn-sm" onclick="removeChallenge(${i})" style="color:var(--danger)">✕</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function updateChallenge(i, field, value) {
+    if (field === 'tips') {
+        currentChallenges[i].tips = value.split('\n').filter(l => l.trim());
+    } else {
+        currentChallenges[i][field] = value;
+    }
+}
+
+function addChallenge() {
+    const id = (currentChallenges.reduce((m, c) => Math.max(m, c.id || 0), 0)) + 1;
+    currentChallenges.push({ id, emoji: '📸', title: 'Nuevo reto', description: 'Descripción del reto.', tips: [] });
+    renderChallenges();
+}
+
+function removeChallenge(i) {
+    if (currentChallenges.length <= 1) { showToast('Debe haber al menos un reto', 'error'); return; }
+    currentChallenges.splice(i, 1);
+    renderChallenges();
+}
+
+function moveChallenge(i, dir) {
+    const j = i + dir;
+    if (j < 0 || j >= currentChallenges.length) return;
+    [currentChallenges[i], currentChallenges[j]] = [currentChallenges[j], currentChallenges[i]];
+    renderChallenges();
+}
+
+// ── UTILS ─────────────────────────────────────────────────────────────
+function slugify(s) {
+    return String(s || '').trim().toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 60);
+}
+
+function fmtDate(d) {
+    if (!d) return '';
+    try { return new Date(d + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }); }
+    catch (e) { return d; }
+}
+
+function esc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.background = type === 'error' ? '#c0392b' : '#27ae60';
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────
+const saved = sessionStorage.getItem('adminKey');
+if (saved) { adminKey = saved; loadEvents(); }
+</script>
+</body>
+</html>

@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Personaliza vuestra boda · Gincana</title>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,wght@0,500;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#faf9f7;--surface:#fff;--border:#e8e2da;--text:#2a2520;--muted:#8a8078;--accent:#f2a4ba;--radius:12px;--shadow:0 2px 16px rgba(0,0,0,.08)}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh}
+h1,h2,h3{font-family:'Bodoni Moda',serif;font-weight:500}
+input,textarea,select{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:'DM Sans',sans-serif;font-size:.93rem;width:100%;outline:none;transition:border .15s}
+input:focus,textarea:focus,select:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:70px}
+label{display:block;font-size:.8rem;color:var(--muted);margin-bottom:5px;font-weight:500;text-transform:uppercase;letter-spacing:.04em}
+.field{margin-bottom:16px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:8px;border:none;font-family:'DM Sans',sans-serif;font-size:.93rem;font-weight:500;cursor:pointer;transition:filter .15s}
+.btn:hover{filter:brightness(.95)}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-secondary{background:transparent;color:var(--text);border:1px solid var(--border)}
+.btn-sm{padding:7px 14px;font-size:.85rem}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* Gate screen */
+#screen-gate{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+.gate-box{background:var(--surface);box-shadow:var(--shadow);border-radius:var(--radius);padding:40px 36px;width:min(380px,100%);text-align:center}
+.gate-box h1{font-size:1.6rem;margin-bottom:6px}
+.gate-box p{color:var(--muted);font-size:.9rem;margin-bottom:28px}
+.gate-error{color:#c0392b;font-size:.85rem;margin-top:10px;min-height:20px}
+
+/* Editor layout */
+#screen-editor{display:none}
+.editor-header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:10}
+.editor-header h1{font-size:1.2rem}
+.editor-wrap{display:grid;grid-template-columns:1fr;max-width:720px;margin:0 auto;padding:24px}
+.section-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;margin-bottom:20px;box-shadow:var(--shadow)}
+.section-card h2{font-size:1.1rem;margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+
+/* Colors */
+.color-row{display:flex;align-items:center;gap:10px}
+.color-row input[type=color]{width:44px;height:38px;padding:2px;border-radius:6px;cursor:pointer;border:1px solid var(--border)}
+.color-row input[type=text]{flex:1}
+.swatches{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.swatch{width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:border-color .15s}
+.swatch:hover,.swatch.selected{border-color:var(--text)}
+
+/* BG presets */
+.bg-presets{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px}
+.bg-preset{border-radius:8px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color .15s;aspect-ratio:16/9;position:relative}
+.bg-preset img{width:100%;height:100%;object-fit:cover;display:block}
+.bg-preset.selected{border-color:var(--accent)}
+.bg-preset .preset-label{position:absolute;bottom:0;left:0;right:0;padding:5px 8px;font-size:.75rem;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.55))}
+.bg-upload{margin-top:10px}
+.bg-upload-hint{font-size:.8rem;color:var(--muted);margin-top:6px}
+
+/* Challenge editor */
+.challenge-item{border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;background:var(--bg)}
+.challenge-item-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.challenge-num{font-size:.75rem;color:var(--muted);min-width:22px}
+.challenge-emoji-input{width:52px!important;text-align:center;font-size:1.3rem;padding:6px;border-radius:8px}
+.challenge-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.challenge-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:8px}
+.add-challenge-btn{width:100%;margin-top:6px;justify-content:center;border-style:dashed}
+
+/* Success banner */
+.save-bar{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 24px;background:var(--accent);color:#fff;position:fixed;bottom:0;left:0;right:0;transform:translateY(100%);transition:transform .3s}
+.save-bar.show{transform:translateY(0)}
+.save-bar p{font-size:.9rem}
+
+/* Publish callout */
+.publish-callout{background:linear-gradient(135deg,#f8f0ea,#fdf5f8);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;display:flex;align-items:center;gap:14px}
+.publish-callout .pub-icon{font-size:1.6rem}
+.publish-callout h3{font-size:1rem;margin-bottom:3px}
+.publish-callout p{font-size:.85rem;color:var(--muted)}
+.pub-toggle{display:flex;align-items:center;gap:8px;cursor:pointer}
+.toggle-track{width:44px;height:24px;background:#ccc;border-radius:12px;position:relative;transition:background .2s}
+.toggle-track.on{background:var(--accent)}
+.toggle-thumb{width:20px;height:20px;background:#fff;border-radius:50%;position:absolute;top:2px;left:2px;transition:left .2s;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.toggle-track.on .toggle-thumb{left:22px}
+
+.toast{position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 20px;border-radius:8px;font-size:.9rem;z-index:999;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- ACCESS GATE -->
+<div id="screen-gate">
+  <div class="gate-box">
+    <h1>¡Hola! 🎉</h1>
+    <p id="gate-subtitle">Accede para personalizar vuestra boda</p>
+    <div class="field" style="text-align:left">
+      <label>Clave de acceso</label>
+      <input type="password" id="gate-key" placeholder="••••••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="checkAccess()">Entrar</button>
+    <p class="gate-error" id="gate-error"></p>
+  </div>
+</div>
+
+<!-- EDITOR -->
+<div id="screen-editor">
+  <div class="editor-header">
+    <h1 id="editor-title">Vuestra Boda</h1>
+    <button class="btn btn-primary btn-sm" onclick="saveAll()">Guardar cambios</button>
+  </div>
+  <div class="editor-wrap">
+
+    <!-- BODA INFO -->
+    <div class="section-card">
+      <h2>Información de la boda</h2>
+      <div class="field"><label>Vuestros nombres</label><input id="e-names" placeholder="Ana y Carlos"></div>
+      <div class="field"><label>Fecha</label><input id="e-date" type="date"></div>
+      <div class="field"><label>Mensaje de bienvenida para los invitados</label><textarea id="e-welcome" rows="3" placeholder="¡Bienvenidos a nuestra boda! Haced fotos y pasadlo genial."></textarea></div>
+    </div>
+
+    <!-- DISEÑO -->
+    <div class="section-card">
+      <h2>Diseño de la aplicación</h2>
+      <div class="field">
+        <label>Color principal</label>
+        <div class="color-row">
+          <input type="color" id="e-accent-picker" oninput="syncColor(this.value)">
+          <input type="text" id="e-accent" placeholder="#f2a4ba" oninput="syncColorPicker(this.value)">
+        </div>
+        <div class="swatches" id="swatches"></div>
+      </div>
+      <div class="field">
+        <label>Tipografía del título</label>
+        <select id="e-font">
+          <option value="Bodoni Moda">Bodoni Moda — Clásica y elegante</option>
+          <option value="Playfair Display">Playfair Display — Romántica</option>
+          <option value="Cormorant Garamond">Cormorant Garamond — Lujosa</option>
+          <option value="Dancing Script">Dancing Script — Cursiva</option>
+          <option value="DM Sans">DM Sans — Moderna y limpia</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Fondo de la aplicación</label>
+        <div class="bg-presets" id="bg-presets">
+          <div class="bg-preset" data-preset="fondo1" onclick="selectBg('fondo1')">
+            <img src="fondo1.jpg" alt="Fondo 1">
+            <span class="preset-label">Clásico</span>
+          </div>
+          <div class="bg-preset" data-preset="fondo2" onclick="selectBg('fondo2')">
+            <img src="fondo2.jpg" alt="Fondo 2">
+            <span class="preset-label">Rosa</span>
+          </div>
+          <div class="bg-preset" data-preset="fondo3" onclick="selectBg('fondo3')">
+            <img src="fondo3.jpg" alt="Fondo 3">
+            <span class="preset-label">Floral</span>
+          </div>
+          <div class="bg-preset" data-preset="fondo4" onclick="selectBg('fondo4')">
+            <img src="fondo4.jpg" alt="Fondo 4">
+            <span class="preset-label">Oscuro</span>
+          </div>
+        </div>
+        <div class="bg-upload">
+          <label style="margin-bottom:5px">O sube vuestra propia foto</label>
+          <input type="file" id="e-bg-upload" accept="image/*" onchange="handleBgUpload(this)">
+          <p class="bg-upload-hint">Recomendado: foto horizontal, mínimo 1200×800 px</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- RETOS -->
+    <div class="section-card">
+      <h2>Retos fotográficos</h2>
+      <p style="font-size:.85rem;color:var(--muted);margin-bottom:16px">Personaliza el título, descripción y emoji de cada reto. Puedes añadir o eliminar retos según lo que mejor encaje con vuestra boda.</p>
+      <div id="challenges-editor"></div>
+      <button class="btn btn-secondary add-challenge-btn" onclick="addChallenge()">+ Añadir reto</button>
+    </div>
+
+    <!-- PUBLICAR -->
+    <div class="section-card">
+      <h2>Publicar</h2>
+      <div class="publish-callout">
+        <div class="pub-icon">🌐</div>
+        <div style="flex:1">
+          <h3>¿Listo para que lo vean tus invitados?</h3>
+          <p>Cuando publiques, la gincana será accesible para todos los invitados.</p>
+        </div>
+        <label class="pub-toggle" onclick="togglePublished()">
+          <div class="toggle-track" id="pub-toggle-track">
+            <div class="toggle-thumb"></div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div style="height:60px"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const EVENT_ID = params.get('event') || '';
+const CLIENT_KEY = params.get('key') || '';
+
+let cfg = null;
+let currentBg = 'fondo2';
+let currentChallenges = [];
+let isPublished = false;
+let bgImageUrl = null;
+
+const ACCENT_SWATCHES = ['#f2a4ba','#b8956a','#a8d8b9','#9bb5d9','#c9a7e8','#e8c07d','#e07d7d','#7dbde8'];
+
+// ── ACCESS ────────────────────────────────────────────────────────────
+document.getElementById('gate-key').addEventListener('keydown', e => { if (e.key === 'Enter') checkAccess(); });
+
+async function checkAccess() {
+    const keyInput = document.getElementById('gate-key').value.trim();
+    if (!EVENT_ID) {
+        document.getElementById('gate-error').textContent = 'Enlace inválido (falta el evento).';
+        return;
+    }
+    const key = CLIENT_KEY || keyInput;
+    const res = await fetch(`/api/client?event=${encodeURIComponent(EVENT_ID)}&key=${encodeURIComponent(key)}`);
+    if (res.status === 401 || res.status === 404) {
+        document.getElementById('gate-error').textContent = 'Clave incorrecta o evento no encontrado.';
+        return;
+    }
+    if (!res.ok) {
+        document.getElementById('gate-error').textContent = 'Error de servidor. Inténtalo de nuevo.';
+        return;
+    }
+    cfg = await res.json();
+    sessionStorage.setItem('clientKey_' + EVENT_ID, key);
+    initEditor(cfg);
+}
+
+function getKey() {
+    return CLIENT_KEY || sessionStorage.getItem('clientKey_' + EVENT_ID) || '';
+}
+
+// Auto-access if key in URL
+if (EVENT_ID && CLIENT_KEY) {
+    checkAccess();
+} else if (EVENT_ID) {
+    const saved = sessionStorage.getItem('clientKey_' + EVENT_ID);
+    if (saved) {
+        document.getElementById('gate-key').value = saved;
+        checkAccess();
+    }
+}
+
+// ── EDITOR ────────────────────────────────────────────────────────────
+function initEditor(c) {
+    cfg = c;
+    currentBg = c.bgPreset || 'fondo2';
+    currentChallenges = JSON.parse(JSON.stringify(c.challenges || []));
+    isPublished = !!c.published;
+    bgImageUrl = c.bgImage || null;
+
+    document.getElementById('editor-title').textContent = c.names || 'Vuestra Boda';
+    document.getElementById('e-names').value   = c.names || '';
+    document.getElementById('e-date').value    = c.date || '';
+    document.getElementById('e-welcome').value = c.welcomeMessage || '';
+    document.getElementById('e-accent').value  = c.accentColor || '#f2a4ba';
+    document.getElementById('e-accent-picker').value = c.accentColor || '#f2a4ba';
+    document.getElementById('e-font').value    = c.fontHeading || 'Bodoni Moda';
+
+    renderSwatches(c.accentColor || '#f2a4ba');
+    renderBgPresets(currentBg);
+    renderChallenges();
+    updatePublishToggle();
+
+    document.getElementById('screen-gate').style.display = 'none';
+    document.getElementById('screen-editor').style.display = 'block';
+}
+
+// ── SAVE ──────────────────────────────────────────────────────────────
+async function saveAll() {
+    const payload = {
+        names: document.getElementById('e-names').value.trim(),
+        date: document.getElementById('e-date').value,
+        welcomeMessage: document.getElementById('e-welcome').value.trim(),
+        accentColor: document.getElementById('e-accent').value.trim() || '#f2a4ba',
+        fontHeading: document.getElementById('e-font').value,
+        bgPreset: currentBg,
+        bgImage: bgImageUrl,
+        challenges: currentChallenges,
+        published: isPublished,
+    };
+    const btn = document.querySelector('.editor-header .btn-primary');
+    btn.disabled = true;
+    btn.textContent = 'Guardando…';
+    const key = getKey();
+    const res = await fetch(`/api/client?event=${encodeURIComponent(EVENT_ID)}&key=${encodeURIComponent(key)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    btn.disabled = false;
+    btn.textContent = 'Guardar cambios';
+    if (!res.ok) { showToast('Error al guardar. Inténtalo de nuevo.', 'error'); return; }
+    cfg = await res.json();
+    showToast('¡Cambios guardados!');
+}
+
+// ── DESIGN ────────────────────────────────────────────────────────────
+function renderSwatches(active) {
+    document.getElementById('swatches').innerHTML = ACCENT_SWATCHES.map(c =>
+        `<div class="swatch ${c === active ? 'selected' : ''}" style="background:${c}" onclick="pickSwatch('${c}')"></div>`
+    ).join('');
+}
+
+function pickSwatch(c) {
+    document.getElementById('e-accent').value = c;
+    document.getElementById('e-accent-picker').value = c;
+    renderSwatches(c);
+}
+
+function syncColor(v) {
+    document.getElementById('e-accent').value = v;
+    renderSwatches(v);
+}
+
+function syncColorPicker(v) {
+    if (/^#[0-9a-fA-F]{6}$/.test(v)) document.getElementById('e-accent-picker').value = v;
+    renderSwatches(v);
+}
+
+function renderBgPresets(active) {
+    document.querySelectorAll('.bg-preset').forEach(el => {
+        el.classList.toggle('selected', el.dataset.preset === active);
+    });
+}
+
+function selectBg(preset) {
+    currentBg = preset;
+    bgImageUrl = null;
+    renderBgPresets(preset);
+}
+
+async function handleBgUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) { showToast('La imagen es demasiado grande (máx. 8 MB)', 'error'); return; }
+    const data = new FormData();
+    data.append('file', file);
+    data.append('upload_preset', 'gymkana_boda');
+    data.append('folder', 'gymkana-boda/backgrounds');
+    const hint = document.querySelector('.bg-upload-hint');
+    hint.textContent = 'Subiendo imagen…';
+    const res = await fetch('https://api.cloudinary.com/v1_1/zzbvccrl/image/upload', { method: 'POST', body: data });
+    if (!res.ok) { showToast('Error subiendo la imagen', 'error'); hint.textContent = ''; return; }
+    const json = await res.json();
+    bgImageUrl = json.secure_url;
+    currentBg = null;
+    document.querySelectorAll('.bg-preset').forEach(el => el.classList.remove('selected'));
+    hint.textContent = 'Imagen subida correctamente ✓';
+}
+
+// ── RETOS ─────────────────────────────────────────────────────────────
+function renderChallenges() {
+    const container = document.getElementById('challenges-editor');
+    container.innerHTML = currentChallenges.map((c, i) => `
+        <div class="challenge-item">
+            <div class="challenge-item-header">
+                <span class="challenge-num">#${i + 1}</span>
+                <input class="challenge-emoji-input" value="${esc(c.emoji)}" oninput="updateChallenge(${i},'emoji',this.value)" maxlength="4">
+                <input style="flex:1" value="${esc(c.title)}" oninput="updateChallenge(${i},'title',this.value)" placeholder="Título del reto">
+            </div>
+            <div class="field" style="margin-bottom:8px">
+                <label>Descripción</label>
+                <textarea rows="2" oninput="updateChallenge(${i},'description',this.value)">${esc(c.description)}</textarea>
+            </div>
+            <div class="challenge-actions">
+                ${i > 0 ? `<button class="btn btn-secondary btn-sm" onclick="moveChallenge(${i},-1)">↑</button>` : ''}
+                ${i < currentChallenges.length - 1 ? `<button class="btn btn-secondary btn-sm" onclick="moveChallenge(${i},1)">↓</button>` : ''}
+                <button class="btn btn-secondary btn-sm" onclick="removeChallenge(${i})" style="color:#c0392b">✕ Eliminar</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function updateChallenge(i, field, value) {
+    currentChallenges[i][field] = value;
+}
+
+function addChallenge() {
+    const id = (currentChallenges.reduce((m, c) => Math.max(m, c.id || 0), 0)) + 1;
+    currentChallenges.push({ id, emoji: '📸', title: 'Nuevo reto', description: 'Descripción del reto.', tips: [] });
+    renderChallenges();
+    requestAnimationFrame(() => {
+        const items = document.querySelectorAll('.challenge-item');
+        items[items.length - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+}
+
+function removeChallenge(i) {
+    if (currentChallenges.length <= 1) { showToast('Debe haber al menos un reto', 'error'); return; }
+    currentChallenges.splice(i, 1);
+    renderChallenges();
+}
+
+function moveChallenge(i, dir) {
+    const j = i + dir;
+    if (j < 0 || j >= currentChallenges.length) return;
+    [currentChallenges[i], currentChallenges[j]] = [currentChallenges[j], currentChallenges[i]];
+    renderChallenges();
+}
+
+// ── PUBLISH ───────────────────────────────────────────────────────────
+function togglePublished() {
+    isPublished = !isPublished;
+    updatePublishToggle();
+}
+
+function updatePublishToggle() {
+    const track = document.getElementById('pub-toggle-track');
+    track.classList.toggle('on', isPublished);
+}
+
+// ── UTILS ─────────────────────────────────────────────────────────────
+function esc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.background = type === 'error' ? '#c0392b' : '#27ae60';
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>

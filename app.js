@@ -5,7 +5,7 @@
 (function () {
     'use strict';
 
-    const CHALLENGES = [
+    let CHALLENGES = [
         { id: 1,  emoji: '👔', title: 'Con alguien de traje',       description: 'Foto con alguien que vaya de traje.', tips: ['Busca a los padrinos o al novio', 'Los hombres suelen ir de traje'], filename: 'Reto_01_Traje' },
         { id: 2,  emoji: '💐', title: 'Flores y decoración',        description: 'Una foto de las flores o la decoración de la boda.', tips: ['El ramo o el arreglo floral estrella', 'Busca un buen fondo'], filename: 'Reto_02_Flores' },
         { id: 3,  emoji: '🗺️', title: 'De fuera de Zaragoza',       description: 'Foto con alguien que no haya nacido en Zaragoza.', tips: ['Pregunta: ¿de dónde eres?', 'Los invitados de fuera siempre posan bien'], filename: 'Reto_03_Fuera_Zaragoza' },
@@ -2032,6 +2032,72 @@
         toastTimer = setTimeout(() => toast.classList.remove('show'), duration);
     }
 
+    // ── EVENT CONFIG ─────────────────────────────────────────
+    async function loadEventConfig() {
+        try {
+            const res = await fetch(apiUrl('/api/config'));
+            if (!res.ok) return; // sin config → usa defaults hardcoded
+            const cfg = await res.json();
+            applyEventConfig(cfg);
+        } catch (e) { /* red caída o KV sin configurar → la app funciona con defaults */ }
+    }
+
+    function applyEventConfig(cfg) {
+        if (!cfg) return;
+
+        // Reemplazar retos si la configuración los define
+        if (Array.isArray(cfg.challenges) && cfg.challenges.length > 0) {
+            CHALLENGES = cfg.challenges.map((c, i) => ({
+                id: c.id || i + 1,
+                emoji: c.emoji || '📸',
+                title: c.title || '',
+                description: c.description || '',
+                tips: Array.isArray(c.tips) ? c.tips : [],
+                filename: c.filename || ('Reto_' + String(i + 1).padStart(2, '0'))
+            }));
+        }
+
+        // Color accent
+        const accent = cfg.accentColor;
+        if (accent) document.documentElement.style.setProperty('--accent', accent);
+
+        // Tipografía del título
+        const font = cfg.fontHeading;
+        if (font) {
+            document.documentElement.style.setProperty('--font-heading', `'${font}', serif`);
+            if (font !== 'Bodoni Moda') {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(font)}:wght@400;500;600&display=swap`;
+                document.head.appendChild(link);
+            }
+        }
+
+        // Fondo
+        const bgEl = document.getElementById('app-bg');
+        if (bgEl) {
+            if (cfg.bgImage) {
+                bgEl.style.backgroundImage = `url(${cfg.bgImage})`;
+            } else if (cfg.bgPreset && cfg.bgPreset !== 'fondo2') {
+                bgEl.style.backgroundImage = `url(${cfg.bgPreset}.jpg)`;
+            }
+        }
+
+        // Mensaje de bienvenida
+        const welcomeEl = document.getElementById('welcome-subtitle') || document.querySelector('.welcome-subtitle');
+        if (welcomeEl && cfg.welcomeMessage) welcomeEl.textContent = cfg.welcomeMessage;
+
+        // Título del evento
+        if (cfg.names) {
+            document.title = cfg.names + ' · Gincana Fotográfica';
+            const titleEl = document.getElementById('event-title') || document.querySelector('.event-title');
+            if (titleEl) titleEl.textContent = cfg.names;
+        }
+    }
+
     // ── BOOT ─────────────────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', async function () {
+        await loadEventConfig();
+        init();
+    });
 })();
